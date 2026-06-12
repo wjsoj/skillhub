@@ -194,18 +194,20 @@ Common `make` targets:
 
 - **M0 — scaffold:** workspace, domain traits, schema, app skeleton. ✅
 - **M1 — vertical slice:** users + namespaces + skills + publish + Postgres FTS. ✅
-- **M2 — governance:** reviews, audit, RBAC, OAuth2 providers, JWT & API tokens. 🚧
+- **M2 — governance:** reviews, audit, RBAC, JWT & API tokens. ✅
 
-M1 is implemented end-to-end: real registration/login with Argon2 + JWT,
+M1 + M2 are implemented end-to-end: real registration/login with Argon2 + JWT,
 API tokens (`Authorization: ApiToken sk_…`), user/namespace directories,
 skill creation & version publishing, weighted Postgres full-text search,
 a cross-skill review queue, stars, and a `clawhub`-compatible `/cli/install`
 that resolves a skill and counts the install. Authorization is enforced
 throughout (namespace/skill ownership checks, default-deny visibility
-filtering, PII redaction). M2 is partially landed (JWT & API tokens done;
-proposal/iteration governance done); OAuth2 providers are the remaining gap.
-An object-store backend is only needed if skills grow large binary
-attachments — not part of the default text-in-Postgres model.
+filtering, PII redaction).
+
+Out of scope by choice: third-party OAuth/SSO (username-password + JWT +
+API tokens cover the self-hosted case), and an object-store backend (skill
+content is text in Postgres; only worth adding if skills grow large binary
+attachments).
 
 See [docs/design.md](docs/design.md) for the full design narrative and
 [docs/architecture.md](docs/architecture.md) for the architecture overview.
