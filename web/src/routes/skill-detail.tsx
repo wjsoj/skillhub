@@ -7,7 +7,7 @@ import remarkGfm from "remark-gfm";
 import {
   ArrowLeft, Plus, GitMerge, MessageSquare, Play, Send, Loader2, ThumbsUp,
   Copy, Check, Github, FileCode, FileText, FolderTree, Package, AlertTriangle,
-  Star, Download, Calendar, ExternalLink, Folder, Hash,
+  Star, Download, Calendar, ExternalLink, Folder, Hash, Tag as TagIcon,
 } from "lucide-react";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { Card } from "@/components/ui/Card";
@@ -27,6 +27,11 @@ import {
   reviewProposal,
   runIterationTests,
   submitIteration,
+  listVersions,
+  publishVersion,
+  getStarStatus,
+  addStar,
+  removeStar,
   type Proposal,
   type IterationJob,
   type Skill,
@@ -120,6 +125,7 @@ function SkillBody({ skill }: { skill: Skill }) {
       <Tabs.Root defaultValue="overview" className="space-y-6">
         <Tabs.List className="tabs-list">
           <Tabs.Trigger value="overview" className="tab">{t("detail.tab.overview")}</Tabs.Trigger>
+          <Tabs.Trigger value="versions" className="tab">{t("detail.tab.versions")}</Tabs.Trigger>
           <Tabs.Trigger value="proposals" className="tab">{t("detail.tab.proposals")}</Tabs.Trigger>
           <Tabs.Trigger value="collaborators" className="tab">{t("detail.tab.collaborators")}</Tabs.Trigger>
           <Tabs.Trigger value="iterations" className="tab">{t("detail.tab.iterations")}</Tabs.Trigger>
@@ -127,6 +133,9 @@ function SkillBody({ skill }: { skill: Skill }) {
 
         <Tabs.Content value="overview">
           <OverviewTab skill={skill} />
+        </Tabs.Content>
+        <Tabs.Content value="versions">
+          <VersionsTab skillId={skill.id} />
         </Tabs.Content>
         <Tabs.Content value="proposals">
           <ProposalsTab skillId={skill.id} />
@@ -253,6 +262,7 @@ function OverviewTab({ skill }: { skill: Skill }) {
 
       {/* Sidebar */}
       <div className="space-y-4 lg:sticky lg:top-20 self-start">
+        <StarButton skillId={skill.id} initialStars={skill.stars} />
         <Card className="p-5 space-y-4">
           <Metric label={t("detail.metric.installs")} value={formatNum(skill.install_count)} icon={Download} />
           <Metric label={t("detail.metric.stars")} value={formatNum(skill.stars)} icon={Star} />
@@ -535,6 +545,105 @@ function formatDate(iso: string, locale: Locale): string {
 
 function shortRepo(url: string): string {
   return url.replace(/^https?:\/\/[^/]+\//, "").replace(/\.git$/, "");
+}
+
+/* ───────── Star button ───────── */
+function StarButton({ skillId, initialStars }: { skillId: string; initialStars: number }) {
+  const t = useT();
+  const qc = useQueryClient();
+  const status = useQuery({ queryKey: ["star", skillId], queryFn: () => getStarStatus(skillId) });
+  const toggle = useMutation({
+    mutationFn: () => (status.data?.starred ? removeStar(skillId) : addStar(skillId)),
+    onSuccess: (s) => qc.setQueryData(["star", skillId], s),
+  });
+  const starred = status.data?.starred ?? false;
+  const count = status.data?.stars ?? initialStars;
+  return (
+    <button
+      onClick={() => toggle.mutate()}
+      disabled={toggle.isPending}
+      className="btn btn-secondary w-full"
+      data-testid="star-button"
+      style={starred ? { borderColor: "var(--accent)", color: "var(--accent)" } : undefined}
+    >
+      <Star size={14} fill={starred ? "var(--accent)" : "none"} />
+      {starred ? t("detail.starred") : t("detail.star")}
+      <span className="font-mono text-[12px]" style={{ color: "var(--fg-muted)" }}>{count}</span>
+    </button>
+  );
+}
+
+/* ───────── Versions ───────── */
+function VersionsTab({ skillId }: { skillId: string }) {
+  const t = useT();
+  const qc = useQueryClient();
+  const q = useQuery({ queryKey: ["versions", skillId], queryFn: () => listVersions(skillId) });
+  const [version, setVersion] = useState("");
+
+  const publish = useMutation({
+    mutationFn: () => publishVersion(skillId, { version: version.trim() }),
+    onSuccess: () => {
+      setVersion("");
+      qc.invalidateQueries({ queryKey: ["versions", skillId] });
+    },
+  });
+
+  return (
+    <div className="space-y-6">
+      <Card className="p-5">
+        <div className="text-[14.5px] font-semibold mb-3">{t("detail.versions.publish")}</div>
+        <form
+          className="flex flex-col sm:flex-row gap-2 items-stretch sm:items-end"
+          onSubmit={(e) => { e.preventDefault(); if (version.trim()) publish.mutate(); }}
+        >
+          <label className="flex-1">
+            <div className="text-[12.5px] font-medium mb-1.5">{t("detail.versions.version")}</div>
+            <input className="input input-mono" value={version} onChange={(e) => setVersion(e.target.value)} placeholder="1.0.0" data-testid="version-input" />
+          </label>
+          <Button disabled={!version.trim() || publish.isPending} data-testid="version-publish">
+            {publish.isPending ? <><Loader2 size={14} className="animate-spin" /> {t("detail.versions.publishing")}</> : <><Plus size={14} /> {t("detail.versions.publishBtn")}</>}
+          </Button>
+        </form>
+        {publish.error && (
+          <div className="mt-3 px-3 py-2 rounded-lg text-[12.5px] font-mono" style={{ background: "var(--bad-soft)", color: "var(--bad)" }} data-testid="version-error">
+            {(publish.error as Error).message}
+          </div>
+        )}
+      </Card>
+
+      <div>
+        <div className="text-[14.5px] font-semibold mb-3">{t("detail.versions.title")}</div>
+        {q.isLoading && <Loader2 size={18} className="animate-spin" style={{ color: "var(--fg-muted)" }} />}
+        {!q.isLoading && (q.data?.length ?? 0) === 0 && (
+          <Card className="p-6 text-center" style={{ color: "var(--fg-muted)" }}>
+            {t("detail.versions.none")}
+          </Card>
+        )}
+        <ul data-testid="version-list">
+          {q.data?.map((v, i) => (
+            <li
+              key={v.id}
+              className="py-4 flex items-start justify-between gap-3"
+              style={{ borderTop: i === 0 ? "1px solid var(--border)" : "0", borderBottom: "1px solid var(--border)" }}
+              data-testid="version-row"
+            >
+              <div className="min-w-0">
+                <div className="flex items-center gap-2 mb-1">
+                  <span className="text-[15px] font-semibold font-mono">v{v.version}</span>
+                  <Badge tone={v.status === "approved" ? "ok" : v.status === "yanked" ? "bad" : "default"}>{v.status}</Badge>
+                  {v.tags.map((tag) => <Tag key={tag}>{tag}</Tag>)}
+                </div>
+                <div className="text-[12px] font-mono" style={{ color: "var(--fg-faint)" }}>
+                  {v.checksum_sha256.slice(0, 16)}… · {new Date(v.published_at).toLocaleDateString()}
+                </div>
+              </div>
+              <TagIcon size={14} style={{ color: "var(--fg-faint)", flexShrink: 0, marginTop: 4 }} />
+            </li>
+          ))}
+        </ul>
+      </div>
+    </div>
+  );
 }
 
 /* ───────── Proposals ───────── */

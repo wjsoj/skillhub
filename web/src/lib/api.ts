@@ -6,6 +6,7 @@
 
 const STORAGE_USER_KEY = "skillhub.userId";
 const STORAGE_USERNAME_KEY = "skillhub.username";
+const STORAGE_TOKEN_KEY = "skillhub.token";
 
 export function getMockUser(): { id: string; name: string } | null {
   const id = localStorage.getItem(STORAGE_USER_KEY);
@@ -18,9 +19,21 @@ export function setMockUser(id: string, name: string) {
   localStorage.setItem(STORAGE_USERNAME_KEY, name);
 }
 
+export function getToken(): string | null {
+  return localStorage.getItem(STORAGE_TOKEN_KEY);
+}
+
+/** Persist a real session: JWT + the resolved user identity. */
+export function setSession(token: string, user: { id: string; username: string; display_name?: string | null }) {
+  localStorage.setItem(STORAGE_TOKEN_KEY, token);
+  localStorage.setItem(STORAGE_USER_KEY, user.id);
+  localStorage.setItem(STORAGE_USERNAME_KEY, user.display_name || user.username);
+}
+
 export function clearMockUser() {
   localStorage.removeItem(STORAGE_USER_KEY);
   localStorage.removeItem(STORAGE_USERNAME_KEY);
+  localStorage.removeItem(STORAGE_TOKEN_KEY);
 }
 
 export class ApiError extends Error {
@@ -37,13 +50,17 @@ export async function api<T>(
   path: string,
   init: RequestInit = {}
 ): Promise<T> {
-  const user = getMockUser();
   const headers = new Headers(init.headers);
   headers.set("Accept", "application/json");
   if (init.body && !headers.has("Content-Type")) {
     headers.set("Content-Type", "application/json");
   }
-  if (user) {
+  // Prefer a real JWT session; fall back to the dev mock-identity header.
+  const token = getToken();
+  const user = getMockUser();
+  if (token) {
+    headers.set("Authorization", `Bearer ${token}`);
+  } else if (user) {
     headers.set("X-Mock-User-Id", user.id);
     if (user.name) headers.set("X-Mock-Username", user.name);
   }
@@ -104,6 +121,139 @@ export interface Skill {
 
 export const listSkills = () => api<Skill[]>(`/skills`);
 export const getSkill = (id: string) => api<Skill>(`/skills/${id}`);
+
+/* ────────────── auth ────────────── */
+
+export interface AuthUser {
+  id: string;
+  username: string;
+  email: string | null;
+  display_name: string | null;
+  is_super_admin: boolean;
+  created_at: string;
+}
+
+export interface AuthResponse {
+  token: string;
+  user: AuthUser;
+}
+
+export const registerUser = (body: {
+  username: string;
+  password: string;
+  email?: string;
+  display_name?: string;
+}) => api<AuthResponse>(`/auth/register`, { method: "POST", body: JSON.stringify(body) });
+
+export const loginUser = (body: { username: string; password: string }) =>
+  api<AuthResponse>(`/auth/login`, { method: "POST", body: JSON.stringify(body) });
+
+export const getMe = () => api<AuthUser>(`/auth/me`);
+
+/* ────────────── search ────────────── */
+
+export const searchSkills = (q: string, namespace?: string) => {
+  const params = new URLSearchParams();
+  if (q) params.set("q", q);
+  if (namespace) params.set("namespace", namespace);
+  const qs = params.toString();
+  return api<(Skill & { score: number })[]>(`/search${qs ? `?${qs}` : ""}`);
+};
+
+/* ────────────── namespaces ────────────── */
+
+export interface NamespaceSummary {
+  id: string;
+  slug: string;
+  display_name: string;
+  scope: "team" | "global";
+  department_id: string | null;
+  skill_count: number;
+  created_at: string;
+}
+
+export const listNamespaces = () => api<NamespaceSummary[]>(`/namespaces`);
+
+export const createNamespace = (body: {
+  slug: string;
+  display_name: string;
+  scope?: "team" | "global";
+  department_id?: string | null;
+}) => api<NamespaceSummary>(`/namespaces`, { method: "POST", body: JSON.stringify(body) });
+
+/* ────────────── skill create / publish ────────────── */
+
+export const createSkill = (body: {
+  namespace: string;
+  slug: string;
+  display_name: string;
+  description?: string;
+  visibility?: "private" | "team" | "global";
+  manifest?: Record<string, unknown>;
+  readme?: string;
+  install_command?: string;
+  repository_url?: string;
+  tags?: string[];
+}) => api<Skill>(`/skills`, { method: "POST", body: JSON.stringify(body) });
+
+export const publishVersion = (
+  skillId: string,
+  body: { version: string; manifest?: Record<string, unknown>; tags?: string[] }
+) =>
+  api<{
+    version_id: string;
+    skill_id: string;
+    version: string;
+    storage_key: string;
+    checksum_sha256: string;
+    status: string;
+  }>(`/skills/${skillId}/publish`, { method: "POST", body: JSON.stringify(body) });
+
+export interface SkillVersion {
+  id: string;
+  version: string;
+  tags: string[];
+  status: string;
+  checksum_sha256: string;
+  size_bytes: number;
+  storage_key: string;
+  published_by: string;
+  published_at: string;
+}
+
+export const listVersions = (skillId: string) =>
+  api<SkillVersion[]>(`/skills/${skillId}/versions`);
+
+export interface StarStatus {
+  starred: boolean;
+  stars: number;
+}
+
+export const getStarStatus = (skillId: string) => api<StarStatus>(`/skills/${skillId}/star`);
+export const addStar = (skillId: string) =>
+  api<StarStatus>(`/skills/${skillId}/star`, { method: "POST" });
+export const removeStar = (skillId: string) =>
+  api<StarStatus>(`/skills/${skillId}/star`, { method: "DELETE" });
+
+/* ────────────── api tokens ────────────── */
+
+export interface ApiToken {
+  id: string;
+  name: string;
+  prefix: string;
+  scopes: string[];
+  expires_at: string | null;
+  last_used_at: string | null;
+  created_at: string;
+}
+
+export const listTokens = () => api<ApiToken[]>(`/tokens`);
+
+export const createToken = (body: { name: string; scopes?: string[] }) =>
+  api<ApiToken & { token: string }>(`/tokens`, { method: "POST", body: JSON.stringify(body) });
+
+export const revokeToken = (id: string) =>
+  api<{ revoked: boolean }>(`/tokens/${id}`, { method: "DELETE" });
 
 export interface DuplicateCheckBody {
   display_name: string;
@@ -265,6 +415,17 @@ export const addDepartmentMember = (
     method: "POST",
     body: JSON.stringify(body),
   });
+
+export interface DepartmentMember {
+  user_id: string;
+  username: string;
+  display_name: string | null;
+  role: "director" | "manager" | "member";
+  joined_at: string;
+}
+
+export const listDepartmentMembers = (deptId: string) =>
+  api<DepartmentMember[]>(`/departments/${deptId}/members`);
 
 export const createGrant = (body: {
   grantee_department_id?: string | null;

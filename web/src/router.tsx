@@ -11,6 +11,7 @@ import { SkillDetailPage } from "@/routes/skill-detail";
 import { OrgsPage } from "@/routes/orgs";
 import { GrantsPage } from "@/routes/grants";
 import { AuditPage } from "@/routes/audit";
+import { TokensPage } from "@/routes/tokens";
 
 const rootRoute = createRootRoute({ component: Layout });
 
@@ -56,6 +57,12 @@ const auditRoute = createRoute({
   component: AuditPage,
 });
 
+const tokensRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/tokens",
+  component: TokensPage,
+});
+
 const routeTree = rootRoute.addChildren([
   indexRoute,
   skillsRoute,
@@ -64,6 +71,7 @@ const routeTree = rootRoute.addChildren([
   orgsRoute,
   grantsRoute,
   auditRoute,
+  tokensRoute,
 ]);
 
 export const router = createRouter({ routeTree, defaultPreload: "intent" });

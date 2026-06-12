@@ -186,8 +186,16 @@ Common `make` targets:
 ## Roadmap
 
 - **M0 — scaffold:** workspace, domain traits, schema, app skeleton. ✅
-- **M1 — vertical slice:** users + namespaces + skills + publish + Postgres FTS.
-- **M2 — governance:** reviews, audit, RBAC, OAuth2 providers, S3 backend, JWT & API tokens.
+- **M1 — vertical slice:** users + namespaces + skills + publish + Postgres FTS. ✅
+- **M2 — governance:** reviews, audit, RBAC, OAuth2 providers, S3 backend, JWT & API tokens. 🚧
+
+M1 is implemented end-to-end: real registration/login with Argon2 + JWT,
+API tokens (`Authorization: ApiToken sk_…`), user/namespace directories,
+skill creation & version publishing, weighted Postgres full-text search,
+a cross-skill review queue, stars, and a `clawhub`-compatible `/cli/install`
+that resolves a skill and counts the install. M2 is partially landed (JWT &
+API tokens done; proposal/iteration governance done); OAuth2 providers and an
+S3 storage backend are the remaining gaps.
 
 See [docs/design.md](docs/design.md) for the full design narrative and
 [docs/architecture.md](docs/architecture.md) for the architecture overview.

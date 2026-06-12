@@ -21,7 +21,7 @@ use skillhub_infra::repo::department_repo::{
 use skillhub_infra::repo::embedding_repo::PgEmbeddingRepo;
 use skillhub_infra::repo::iteration_repo::PgIterationRepo;
 use skillhub_infra::repo::proposal_repo::{PgDraftRepo, PgProposalRepo};
-use skillhub_infra::{init_pool, run_migrations, AppConfig, RedisClient};
+use skillhub_infra::{init_pool, run_migrations, AppConfig, PgPool, RedisClient};
 use skillhub_search::DuplicateDetector;
 use state::AppState;
 
@@ -34,6 +34,7 @@ async fn main() -> anyhow::Result<()> {
 
     let pool = init_pool(&config.database.url, config.database.max_connections).await?;
     run_migrations(&pool).await?;
+    bootstrap_admin(&pool, &config).await?;
 
     let redis = RedisClient::connect(&config.redis.url).await?;
 
@@ -88,6 +89,30 @@ async fn main() -> anyhow::Result<()> {
     tracing::info!(%addr, "listening");
     axum::serve(listener, app).await?;
 
+    Ok(())
+}
+
+/// Ensure a usable super-admin account exists with a password, so a fresh
+/// deployment can be logged into out of the box. Idempotent: re-running
+/// only refreshes the admin's password hash and super-admin flag.
+async fn bootstrap_admin(pool: &PgPool, config: &AppConfig) -> anyhow::Result<()> {
+    let auth = &config.auth;
+    if !auth.bootstrap_admin_enabled {
+        return Ok(());
+    }
+    let hash = skillhub_auth::password::hash_password(&auth.bootstrap_admin_password)?;
+    sqlx::query(
+        r#"INSERT INTO users (username, email, display_name, is_super_admin, password_hash)
+           VALUES ($1, $2, 'Platform Admin', true, $3)
+           ON CONFLICT (username) DO UPDATE
+             SET is_super_admin = true, password_hash = EXCLUDED.password_hash"#,
+    )
+    .bind(&auth.bootstrap_admin_username)
+    .bind(format!("{}@local", auth.bootstrap_admin_username))
+    .bind(&hash)
+    .execute(pool)
+    .await?;
+    tracing::info!(user = %auth.bootstrap_admin_username, "bootstrapped super-admin account");
     Ok(())
 }
 

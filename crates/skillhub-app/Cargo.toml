@@ -30,6 +30,7 @@ serde_with.workspace = true
 validator.workspace = true
 
 sqlx.workspace = true
+sha2.workspace = true
 
 anyhow.workspace = true
 thiserror.workspace = true

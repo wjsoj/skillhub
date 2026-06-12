@@ -1,25 +1,33 @@
-//! /api/v1/skills — read endpoints. Write paths still live in their
-//! own modules (drafts/proposals, iterations, collaborators).
+//! /api/v1/skills — read + create + publish. Other write paths
+//! (drafts/proposals, iterations, collaborators) live in their own modules.
 
 use std::sync::Arc;
 
 use axum::{
     extract::{Path, State},
-    routing::get,
+    routing::{get, post},
     Json, Router,
 };
 use chrono::{DateTime, Utc};
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
+use sha2::{Digest, Sha256};
 use sqlx::Row;
 use uuid::Uuid;
 
 use crate::error::ApiError;
+use crate::middleware::AuthPrincipal;
 use crate::state::AppState;
+use skillhub_domain::embedding::{EmbeddingRecord, EmbeddingSource};
+use skillhub_domain::DomainError;
+use skillhub_embeddings::SkillContent;
 
 pub fn routes() -> Router<Arc<AppState>> {
     Router::new()
-        .route("/", get(list_all))
+        .route("/", get(list_all).post(create_skill))
         .route("/:id", get(get_one))
+        .route("/:id/publish", post(publish_version))
+        .route("/:id/versions", get(list_versions))
+        .route("/:id/star", get(star_status).post(add_star).delete(remove_star))
 }
 
 #[derive(Debug, Serialize)]
@@ -44,23 +52,22 @@ pub struct SkillDto {
     pub updated_at: DateTime<Utc>,
 }
 
-async fn list_all(State(state): State<Arc<AppState>>) -> Result<Json<Vec<SkillDto>>, ApiError> {
-    let rows = sqlx::query(
-        r#"
-        SELECT s.id, s.namespace_id, n.slug AS namespace_slug, n.department_id,
-               s.slug, s.display_name, s.description, s.visibility,
-               s.manifest, s.readme, s.install_command, s.repository_url,
-               s.tags, s.downloads, s.install_count, s.stars,
-               s.created_at, s.updated_at
-        FROM skills s
-        JOIN namespaces n ON n.id = s.namespace_id
-        ORDER BY s.install_count DESC, s.display_name ASC
-        "#,
-    )
-    .fetch_all(&state.pool)
-    .await
-    .map_err(|e| skillhub_domain::DomainError::Internal(e.to_string()))?;
+const SELECT_SKILL: &str = r#"
+    SELECT s.id, s.namespace_id, n.slug AS namespace_slug, n.department_id,
+           s.slug, s.display_name, s.description, s.visibility,
+           s.manifest, s.readme, s.install_command, s.repository_url,
+           s.tags, s.downloads, s.install_count, s.stars,
+           s.created_at, s.updated_at
+    FROM skills s
+    JOIN namespaces n ON n.id = s.namespace_id
+"#;
 
+async fn list_all(State(state): State<Arc<AppState>>) -> Result<Json<Vec<SkillDto>>, ApiError> {
+    let sql = format!("{SELECT_SKILL} ORDER BY s.install_count DESC, s.display_name ASC");
+    let rows = sqlx::query(&sql)
+        .fetch_all(&state.pool)
+        .await
+        .map_err(|e| DomainError::Internal(e.to_string()))?;
     Ok(Json(rows.into_iter().map(row_to_dto).collect()))
 }
 
@@ -68,24 +75,377 @@ async fn get_one(
     State(state): State<Arc<AppState>>,
     Path(id): Path<Uuid>,
 ) -> Result<Json<SkillDto>, ApiError> {
-    let row = sqlx::query(
-        r#"
-        SELECT s.id, s.namespace_id, n.slug AS namespace_slug, n.department_id,
-               s.slug, s.display_name, s.description, s.visibility,
-               s.manifest, s.readme, s.install_command, s.repository_url,
-               s.tags, s.downloads, s.install_count, s.stars,
-               s.created_at, s.updated_at
-        FROM skills s
-        JOIN namespaces n ON n.id = s.namespace_id
-        WHERE s.id = $1
-        "#,
+    let sql = format!("{SELECT_SKILL} WHERE s.id = $1");
+    let row = sqlx::query(&sql)
+        .bind(id)
+        .fetch_optional(&state.pool)
+        .await
+        .map_err(|e| DomainError::Internal(e.to_string()))?
+        .ok_or_else(|| DomainError::NotFound(format!("skill {id}")))?;
+    Ok(Json(row_to_dto(row)))
+}
+
+#[derive(Debug, Deserialize)]
+struct CreateSkillBody {
+    /// Either a namespace slug or its UUID string.
+    namespace: String,
+    slug: String,
+    display_name: String,
+    description: Option<String>,
+    #[serde(default = "default_visibility")]
+    visibility: String,
+    manifest: Option<serde_json::Value>,
+    readme: Option<String>,
+    install_command: Option<String>,
+    repository_url: Option<String>,
+    #[serde(default)]
+    tags: Vec<String>,
+}
+
+fn default_visibility() -> String {
+    "team".into()
+}
+
+async fn create_skill(
+    State(state): State<Arc<AppState>>,
+    AuthPrincipal(_principal): AuthPrincipal,
+    Json(body): Json<CreateSkillBody>,
+) -> Result<Json<SkillDto>, ApiError> {
+    let slug = body.slug.trim().to_lowercase();
+    if slug.is_empty() || body.display_name.trim().is_empty() {
+        return Err(DomainError::Validation("slug and display_name are required".into()).into());
+    }
+    if !matches!(body.visibility.as_str(), "private" | "team" | "global") {
+        return Err(DomainError::Validation("invalid visibility".into()).into());
+    }
+
+    // Resolve the namespace by slug, falling back to UUID.
+    let ns_id: Uuid = {
+        let by_slug = sqlx::query_scalar::<_, Uuid>("SELECT id FROM namespaces WHERE slug = $1")
+            .bind(body.namespace.trim())
+            .fetch_optional(&state.pool)
+            .await
+            .map_err(|e| DomainError::Internal(e.to_string()))?;
+        match by_slug {
+            Some(id) => id,
+            None => Uuid::parse_str(body.namespace.trim())
+                .ok()
+                .ok_or_else(|| DomainError::NotFound(format!("namespace '{}'", body.namespace)))?,
+        }
+    };
+
+    let dup = sqlx::query("SELECT 1 FROM skills WHERE namespace_id = $1 AND slug = $2")
+        .bind(ns_id)
+        .bind(&slug)
+        .fetch_optional(&state.pool)
+        .await
+        .map_err(|e| DomainError::Internal(e.to_string()))?;
+    if dup.is_some() {
+        return Err(DomainError::AlreadyExists(format!("skill '{slug}' already exists in namespace")).into());
+    }
+
+    let manifest = body.manifest.clone().unwrap_or_else(|| serde_json::json!({}));
+    let id: Uuid = sqlx::query_scalar(
+        r#"INSERT INTO skills
+           (namespace_id, slug, display_name, description, visibility,
+            manifest, readme, install_command, repository_url, tags)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
+           RETURNING id"#,
     )
-    .bind(id)
+    .bind(ns_id)
+    .bind(&slug)
+    .bind(body.display_name.trim())
+    .bind(body.description.as_deref().map(|s| s.trim()).filter(|s| !s.is_empty()))
+    .bind(&body.visibility)
+    .bind(&manifest)
+    .bind(body.readme.as_deref())
+    .bind(body.install_command.as_deref().map(|s| s.trim()).filter(|s| !s.is_empty()))
+    .bind(body.repository_url.as_deref().map(|s| s.trim()).filter(|s| !s.is_empty()))
+    .bind(&body.tags)
+    .fetch_one(&state.pool)
+    .await
+    .map_err(|e| DomainError::Internal(e.to_string()))?;
+
+    // Best-effort: index the new skill so it shows up in duplicate-check
+    // and (eventually) semantic search. Failures don't block creation.
+    if let Err(e) = embed_skill(
+        &state,
+        id,
+        &body.display_name,
+        &slug,
+        body.description.as_deref(),
+        body.readme.as_deref(),
+        &body.tags,
+    )
+    .await
+    {
+        tracing::warn!(skill = %id, error = %e, "embed-on-create failed");
+    }
+
+    let sql = format!("{SELECT_SKILL} WHERE s.id = $1");
+    let row = sqlx::query(&sql)
+        .bind(id)
+        .fetch_one(&state.pool)
+        .await
+        .map_err(|e| DomainError::Internal(e.to_string()))?;
+    Ok(Json(row_to_dto(row)))
+}
+
+#[derive(Debug, Deserialize)]
+struct PublishBody {
+    version: String,
+    manifest: Option<serde_json::Value>,
+    #[serde(default)]
+    tags: Vec<String>,
+}
+
+#[derive(Debug, Serialize)]
+struct PublishedVersion {
+    version_id: Uuid,
+    skill_id: Uuid,
+    version: String,
+    storage_key: String,
+    checksum_sha256: String,
+    status: String,
+}
+
+async fn publish_version(
+    State(state): State<Arc<AppState>>,
+    AuthPrincipal(principal): AuthPrincipal,
+    Path(skill_id): Path<Uuid>,
+    Json(body): Json<PublishBody>,
+) -> Result<Json<PublishedVersion>, ApiError> {
+    let uid = principal.user_id.ok_or(DomainError::Unauthorized)?;
+    let version = body.version.trim();
+    if semver::Version::parse(version).is_err() {
+        return Err(DomainError::Validation(format!("'{version}' is not valid semver")).into());
+    }
+
+    // Resolve the skill + its namespace slug (for the storage key).
+    let srow = sqlx::query(
+        r#"SELECT s.slug, n.slug AS ns_slug, s.manifest
+           FROM skills s JOIN namespaces n ON n.id = s.namespace_id
+           WHERE s.id = $1"#,
+    )
+    .bind(skill_id)
     .fetch_optional(&state.pool)
     .await
-    .map_err(|e| skillhub_domain::DomainError::Internal(e.to_string()))?
-    .ok_or_else(|| skillhub_domain::DomainError::NotFound(format!("skill {id}")))?;
-    Ok(Json(row_to_dto(row)))
+    .map_err(|e| DomainError::Internal(e.to_string()))?
+    .ok_or_else(|| DomainError::NotFound(format!("skill {skill_id}")))?;
+    let skill_slug: String = srow.get("slug");
+    let ns_slug: String = srow.get("ns_slug");
+    let skill_manifest: serde_json::Value = srow.get("manifest");
+
+    let dup = sqlx::query("SELECT 1 FROM skill_versions WHERE skill_id = $1 AND version = $2")
+        .bind(skill_id)
+        .bind(version)
+        .fetch_optional(&state.pool)
+        .await
+        .map_err(|e| DomainError::Internal(e.to_string()))?;
+    if dup.is_some() {
+        return Err(DomainError::AlreadyExists(format!("version {version} already published")).into());
+    }
+
+    let manifest = body.manifest.unwrap_or(skill_manifest);
+    let manifest_bytes = serde_json::to_vec(&manifest).unwrap_or_default();
+    let checksum: String = {
+        let mut h = Sha256::new();
+        h.update(&manifest_bytes);
+        h.finalize().iter().map(|b| format!("{b:02x}")).collect()
+    };
+    let storage_key = format!("skills/{ns_slug}/{skill_slug}/{version}.tgz");
+    let size = manifest_bytes.len() as i64;
+
+    let version_id: Uuid = sqlx::query_scalar(
+        r#"INSERT INTO skill_versions
+           (skill_id, version, tags, manifest, storage_key, size_bytes,
+            checksum_sha256, status, published_by)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,'approved',$8)
+           RETURNING id"#,
+    )
+    .bind(skill_id)
+    .bind(version)
+    .bind(&body.tags)
+    .bind(&manifest)
+    .bind(&storage_key)
+    .bind(size)
+    .bind(&checksum)
+    .bind(uid)
+    .fetch_one(&state.pool)
+    .await
+    .map_err(|e| DomainError::Internal(e.to_string()))?;
+
+    // Touch the skill so it sorts as recently updated.
+    let _ = sqlx::query("UPDATE skills SET updated_at = now() WHERE id = $1")
+        .bind(skill_id)
+        .execute(&state.pool)
+        .await;
+
+    Ok(Json(PublishedVersion {
+        version_id,
+        skill_id,
+        version: version.to_string(),
+        storage_key,
+        checksum_sha256: checksum,
+        status: "approved".into(),
+    }))
+}
+
+async fn embed_skill(
+    state: &AppState,
+    id: Uuid,
+    display_name: &str,
+    slug: &str,
+    description: Option<&str>,
+    readme: Option<&str>,
+    tags: &[String],
+) -> anyhow::Result<()> {
+    let content = SkillContent {
+        display_name,
+        slug,
+        description,
+        readme,
+        manifest: None,
+        tags,
+    };
+    let text = content.to_embedding_input();
+    let emb = state.embedder.embed(&text).await?;
+    let record = EmbeddingRecord {
+        id: Uuid::new_v4(),
+        skill_id: id,
+        version_id: None,
+        source: EmbeddingSource::Skill,
+        model: state.embedder.model().to_string(),
+        dim: state.embedder.dim() as i32,
+        content_hash: emb.content_hash.clone(),
+        text_preview: Some(text.chars().take(200).collect()),
+        updated_at: Utc::now(),
+    };
+    state
+        .embeddings
+        .upsert(&record, &emb.vector)
+        .await
+        .map_err(|e| anyhow::anyhow!(e.to_string()))?;
+    Ok(())
+}
+
+#[derive(Debug, Serialize)]
+struct VersionDto {
+    id: Uuid,
+    version: String,
+    tags: Vec<String>,
+    status: String,
+    checksum_sha256: String,
+    size_bytes: i64,
+    storage_key: String,
+    published_by: Uuid,
+    published_at: DateTime<Utc>,
+}
+
+async fn list_versions(
+    State(state): State<Arc<AppState>>,
+    Path(skill_id): Path<Uuid>,
+) -> Result<Json<Vec<VersionDto>>, ApiError> {
+    let rows = sqlx::query(
+        r#"SELECT id, version, tags, status, checksum_sha256, size_bytes,
+                  storage_key, published_by, published_at
+           FROM skill_versions WHERE skill_id = $1
+           ORDER BY published_at DESC"#,
+    )
+    .bind(skill_id)
+    .fetch_all(&state.pool)
+    .await
+    .map_err(|e| DomainError::Internal(e.to_string()))?;
+    Ok(Json(
+        rows.iter()
+            .map(|r| VersionDto {
+                id: r.get("id"),
+                version: r.get("version"),
+                tags: r.get("tags"),
+                status: r.get("status"),
+                checksum_sha256: r.get("checksum_sha256"),
+                size_bytes: r.get("size_bytes"),
+                storage_key: r.get("storage_key"),
+                published_by: r.get("published_by"),
+                published_at: r.get("published_at"),
+            })
+            .collect(),
+    ))
+}
+
+#[derive(Debug, Serialize)]
+struct StarStatus {
+    starred: bool,
+    stars: i64,
+}
+
+async fn recount_stars(state: &AppState, skill_id: Uuid) -> Result<i64, ApiError> {
+    let n: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM skill_stars WHERE skill_id = $1")
+        .bind(skill_id)
+        .fetch_one(&state.pool)
+        .await
+        .map_err(|e| DomainError::Internal(e.to_string()))?;
+    let _ = sqlx::query("UPDATE skills SET stars = $1 WHERE id = $2")
+        .bind(n)
+        .bind(skill_id)
+        .execute(&state.pool)
+        .await;
+    Ok(n)
+}
+
+async fn star_status(
+    State(state): State<Arc<AppState>>,
+    AuthPrincipal(principal): AuthPrincipal,
+    Path(skill_id): Path<Uuid>,
+) -> Result<Json<StarStatus>, ApiError> {
+    let uid = principal.user_id.ok_or(DomainError::Unauthorized)?;
+    let starred = sqlx::query("SELECT 1 FROM skill_stars WHERE skill_id = $1 AND user_id = $2")
+        .bind(skill_id)
+        .bind(uid)
+        .fetch_optional(&state.pool)
+        .await
+        .map_err(|e| DomainError::Internal(e.to_string()))?
+        .is_some();
+    let stars: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM skill_stars WHERE skill_id = $1")
+        .bind(skill_id)
+        .fetch_one(&state.pool)
+        .await
+        .map_err(|e| DomainError::Internal(e.to_string()))?;
+    Ok(Json(StarStatus { starred, stars }))
+}
+
+async fn add_star(
+    State(state): State<Arc<AppState>>,
+    AuthPrincipal(principal): AuthPrincipal,
+    Path(skill_id): Path<Uuid>,
+) -> Result<Json<StarStatus>, ApiError> {
+    let uid = principal.user_id.ok_or(DomainError::Unauthorized)?;
+    sqlx::query(
+        "INSERT INTO skill_stars (skill_id, user_id) VALUES ($1, $2) ON CONFLICT DO NOTHING",
+    )
+    .bind(skill_id)
+    .bind(uid)
+    .execute(&state.pool)
+    .await
+    .map_err(|e| DomainError::Internal(e.to_string()))?;
+    let stars = recount_stars(&state, skill_id).await?;
+    Ok(Json(StarStatus { starred: true, stars }))
+}
+
+async fn remove_star(
+    State(state): State<Arc<AppState>>,
+    AuthPrincipal(principal): AuthPrincipal,
+    Path(skill_id): Path<Uuid>,
+) -> Result<Json<StarStatus>, ApiError> {
+    let uid = principal.user_id.ok_or(DomainError::Unauthorized)?;
+    sqlx::query("DELETE FROM skill_stars WHERE skill_id = $1 AND user_id = $2")
+        .bind(skill_id)
+        .bind(uid)
+        .execute(&state.pool)
+        .await
+        .map_err(|e| DomainError::Internal(e.to_string()))?;
+    let stars = recount_stars(&state, skill_id).await?;
+    Ok(Json(StarStatus { starred: false, stars }))
 }
 
 fn row_to_dto(r: sqlx::postgres::PgRow) -> SkillDto {

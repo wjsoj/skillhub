@@ -3,7 +3,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ChevronRight, ChevronDown, Plus, Loader2 } from "lucide-react";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { Badge } from "@/components/ui/Badge";
-import { addDepartmentMember, createDepartment, listDepartments, type Department } from "@/lib/api";
+import { addDepartmentMember, createDepartment, listDepartments, listDepartmentMembers, type Department } from "@/lib/api";
 import { cn } from "@/lib/cn";
 import { useT } from "@/i18n";
 
@@ -205,18 +205,53 @@ function CreateDept({
 
 function MembersPanel({ dept }: { dept: Department }) {
   const t = useT();
+  const qc = useQueryClient();
   const [userId, setUserId] = useState("");
   const [role, setRole] = useState<"director" | "manager" | "member">("member");
+  const members = useQuery({
+    queryKey: ["dept-members", dept.id],
+    queryFn: () => listDepartmentMembers(dept.id),
+  });
   const add = useMutation({
     mutationFn: () => addDepartmentMember(dept.id, { user_id: userId, role }),
-    onSuccess: () => setUserId(""),
+    onSuccess: () => {
+      setUserId("");
+      qc.invalidateQueries({ queryKey: ["dept-members", dept.id] });
+    },
   });
+
+  const roleLabel = (r: string) =>
+    r === "director" ? t("org.role.director") : r === "manager" ? t("org.role.manager") : t("org.role.member");
 
   return (
     <div>
       <div className="text-[13px] mb-1" style={{ color: "var(--fg-subtle)" }}>{t("org.selected")}</div>
       <h3 className="display-2 mb-1">{dept.name}</h3>
       <div className="font-mono text-[11.5px] mb-7" style={{ color: "var(--fg-faint)" }}>{dept.id}</div>
+
+      <h4 className="text-[14px] font-semibold mb-3">{t("org.members")}</h4>
+      <ul className="mb-7" data-testid="member-list">
+        {(members.data?.length ?? 0) === 0 ? (
+          <li className="text-[13px]" style={{ color: "var(--fg-muted)" }}>{t("org.noMembers")}</li>
+        ) : (
+          members.data?.map((m, i) => (
+            <li
+              key={m.user_id}
+              className="py-3 flex items-center justify-between gap-3"
+              style={{ borderTop: i === 0 ? "1px solid var(--border)" : "0", borderBottom: "1px solid var(--border)" }}
+              data-testid="member-row"
+            >
+              <div className="min-w-0">
+                <div className="text-[14px] font-medium">{m.display_name || m.username}</div>
+                <div className="text-[11.5px] font-mono" style={{ color: "var(--fg-faint)" }}>{m.username}</div>
+              </div>
+              <Badge tone={m.role === "director" ? "accent" : m.role === "manager" ? "info" : "default"}>
+                {roleLabel(m.role)}
+              </Badge>
+            </li>
+          ))
+        )}
+      </ul>
 
       <h4 className="text-[14px] font-semibold mb-3">{t("org.addMember")}</h4>
       <form

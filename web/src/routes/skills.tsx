@@ -1,12 +1,22 @@
 import { Link } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { Search, Plus, Loader2 } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { Badge, Tag } from "@/components/ui/Badge";
-import { listSkills, type Skill } from "@/lib/api";
+import { listSkills, searchSkills, type Skill } from "@/lib/api";
 import { useT } from "@/i18n";
 import type { TKey } from "@/i18n/dict";
+
+/** Debounce a fast-changing value so we don't hit /search on every keystroke. */
+function useDebounced<T>(value: T, ms: number): T {
+  const [v, setV] = useState(value);
+  useEffect(() => {
+    const id = setTimeout(() => setV(value), ms);
+    return () => clearTimeout(id);
+  }, [value, ms]);
+  return v;
+}
 
 type Vis = "all" | "private" | "team" | "global";
 
@@ -19,19 +29,24 @@ const VIS_LABEL: Record<Vis, TKey> = {
 
 export function SkillsListPage() {
   const t = useT();
-  const q = useQuery({ queryKey: ["skills"], queryFn: listSkills });
   const [query, setQuery] = useState("");
   const [vis, setVis] = useState<Vis>("all");
+  const debounced = useDebounced(query.trim(), 250);
+  const searching = debounced.length > 0;
+
+  // Base listing for browse mode; server-side FTS when there's a query.
+  const base = useQuery({ queryKey: ["skills"], queryFn: listSkills, enabled: !searching });
+  const search = useQuery({
+    queryKey: ["search", debounced],
+    queryFn: () => searchSkills(debounced),
+    enabled: searching,
+  });
+  const q = searching ? search : base;
 
   const filtered = useMemo<Skill[]>(() => {
-    const rows = q.data ?? [];
-    return rows.filter((r) => {
-      if (vis !== "all" && r.visibility !== vis) return false;
-      if (!query.trim()) return true;
-      const hay = `${r.display_name} ${r.slug} ${r.namespace_slug} ${r.description ?? ""} ${r.tags.join(" ")}`.toLowerCase();
-      return hay.includes(query.toLowerCase());
-    });
-  }, [q.data, query, vis]);
+    const rows = (q.data ?? []) as Skill[];
+    return rows.filter((r) => (vis === "all" ? true : r.visibility === vis));
+  }, [q.data, vis]);
 
   return (
     <>

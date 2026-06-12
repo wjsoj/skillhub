@@ -1,23 +1,29 @@
 import { useMemo, useState } from "react";
-import { useMutation } from "@tanstack/react-query";
-import { Link } from "@tanstack/react-router";
+import { useMutation, useQuery } from "@tanstack/react-query";
+import { Link, useNavigate } from "@tanstack/react-router";
 import { ArrowLeft, Sparkles, CheckCircle2, AlertTriangle, Loader2 } from "lucide-react";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { Badge, Tag } from "@/components/ui/Badge";
 import { Meter } from "@/components/ui/Meter";
-import { checkDuplicate, type DuplicateReport } from "@/lib/api";
+import { checkDuplicate, createSkill, listNamespaces, type DuplicateReport } from "@/lib/api";
 import { useT } from "@/i18n";
 import type { TKey } from "@/i18n/dict";
 
 export function SkillsNewPage() {
   const t = useT();
+  const navigate = useNavigate();
   const [name, setName] = useState("");
   const [slug, setSlug] = useState("");
+  const [namespace, setNamespace] = useState("");
   const [description, setDescription] = useState("");
   const [readme, setReadme] = useState("");
   const [tags, setTags] = useState("");
   const [report, setReport] = useState<DuplicateReport | null>(null);
   const [override, setOverride] = useState(false);
+
+  const namespaces = useQuery({ queryKey: ["namespaces"], queryFn: listNamespaces });
+
+  const tagList = () => tags.split(",").map((s) => s.trim()).filter(Boolean);
 
   const dup = useMutation({
     mutationFn: () =>
@@ -26,13 +32,28 @@ export function SkillsNewPage() {
         slug,
         description: description || undefined,
         readme: readme || undefined,
-        tags: tags ? tags.split(",").map((s) => s.trim()).filter(Boolean) : undefined,
+        tags: tags ? tagList() : undefined,
       }),
     onSuccess: setReport,
   });
 
+  const publish = useMutation({
+    mutationFn: () =>
+      createSkill({
+        namespace,
+        slug: slug.trim(),
+        display_name: name.trim(),
+        description: description.trim() || undefined,
+        readme: readme.trim() || undefined,
+        tags: tagList(),
+        manifest: { version: "0.1.0" },
+      }),
+    onSuccess: (skill) => navigate({ to: "/skills/$id", params: { id: skill.id } }),
+  });
+
   const enough = useMemo(() => name.trim().length >= 4 && slug.trim().length >= 3, [name, slug]);
   const high = report?.candidates.find((c) => c.confidence === "high") ?? null;
+  const canPublish = enough && !!namespace && (!high || override);
 
   return (
     <>
@@ -74,6 +95,21 @@ export function SkillsNewPage() {
               placeholder="pdf-parser"
             />
           </Field>
+          <Field label={t("new.field.namespace")}>
+            <select
+              data-testid="field-namespace"
+              className="select"
+              value={namespace}
+              onChange={(e) => setNamespace(e.target.value)}
+            >
+              <option value="">—</option>
+              {(namespaces.data ?? []).map((n) => (
+                <option key={n.id} value={n.slug}>
+                  {n.slug} · {n.display_name}
+                </option>
+              ))}
+            </select>
+          </Field>
           <Field label={t("new.field.desc")}>
             <input
               data-testid="field-description"
@@ -114,15 +150,21 @@ export function SkillsNewPage() {
             </button>
             <button
               type="button"
-              className="btn btn-secondary"
-              disabled={!enough || (!!high && !override)}
+              className="btn btn-primary"
+              disabled={!canPublish || publish.isPending}
+              onClick={() => publish.mutate()}
               data-testid="btn-submit"
             >
-              {t("new.publish")}
+              {publish.isPending ? <><Loader2 size={14} className="animate-spin" /> {t("new.publishing")}</> : t("new.publish")}
             </button>
             {high && !override && (
               <span className="text-[13px]" style={{ color: "var(--bad)" }}>
                 {t("new.dupWarn")}
+              </span>
+            )}
+            {enough && !namespace && (
+              <span className="text-[13px]" style={{ color: "var(--fg-muted)" }}>
+                {t("new.needNamespace")}
               </span>
             )}
           </div>
@@ -137,6 +179,11 @@ export function SkillsNewPage() {
           {dup.error && (
             <div className="mt-4 px-4 py-3 rounded-lg" style={{ background: "var(--bad-soft)", color: "var(--bad)" }}>
               <span className="font-mono text-[12.5px]">{(dup.error as Error).message}</span>
+            </div>
+          )}
+          {publish.error && (
+            <div className="mt-4 px-4 py-3 rounded-lg" style={{ background: "var(--bad-soft)", color: "var(--bad)" }} data-testid="publish-error">
+              <span className="font-mono text-[12.5px]">{(publish.error as Error).message}</span>
             </div>
           )}
         </form>

@@ -2,7 +2,7 @@ import { Link, Outlet, useRouterState } from "@tanstack/react-router";
 import * as Dialog from "@radix-ui/react-dialog";
 import { Menu, X, LogOut } from "lucide-react";
 import { useEffect, useState } from "react";
-import { clearMockUser, getMockUser, setMockUser } from "@/lib/api";
+import { clearMockUser, getMockUser, setMockUser, setSession, loginUser, registerUser, ApiError } from "@/lib/api";
 import { cn } from "@/lib/cn";
 import { ThemeToggle } from "@/components/ui/ThemeToggle";
 import { LocaleToggle } from "@/components/ui/LocaleToggle";
@@ -16,6 +16,7 @@ const NAV = [
   { to: "/orgs", label: "nav.org" },
   { to: "/grants", label: "nav.grants" },
   { to: "/audit", label: "nav.audit" },
+  { to: "/tokens", label: "nav.tokens" },
 ] as const satisfies ReadonlyArray<{ to: string; label: TKey }>;
 
 export function Layout() {
@@ -175,7 +176,135 @@ function Mark() {
   );
 }
 
+type AuthMode = "signin" | "register" | "demo";
+
 function LoginGate({ onSubmit }: { onSubmit: (id: string, name: string) => void }) {
+  const t = useT();
+  const [mode, setMode] = useState<AuthMode>("signin");
+
+  useEffect(() => {
+    document.body.style.overflow = "hidden";
+    return () => { document.body.style.overflow = ""; };
+  }, []);
+
+  const tabs: { key: AuthMode; label: string }[] = [
+    { key: "signin", label: t("login.tab.signin") },
+    { key: "register", label: t("login.tab.register") },
+    { key: "demo", label: t("login.tab.demo") },
+  ];
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-3 sm:p-6"
+      style={{ background: "color-mix(in srgb, var(--bg) 60%, transparent)", backdropFilter: "blur(8px)" }}
+      data-testid="login-gate"
+    >
+      <div className="card card-elevated w-full max-w-[440px] p-7 reveal">
+        <div className="flex items-center gap-3 mb-5">
+          <Mark />
+          <h2 className="text-[18px] font-semibold tracking-tight">{t("login.welcome")}</h2>
+        </div>
+
+        <div className="tabs-list mb-6">
+          {tabs.map((tab) => (
+            <button
+              key={tab.key}
+              className="tab"
+              data-state={mode === tab.key ? "active" : "inactive"}
+              data-testid={`login-tab-${tab.key}`}
+              onClick={() => setMode(tab.key)}
+            >
+              {tab.label}
+            </button>
+          ))}
+        </div>
+
+        {mode === "demo" ? (
+          <DemoIdentity onSubmit={onSubmit} />
+        ) : (
+          <CredentialForm mode={mode} />
+        )}
+      </div>
+    </div>
+  );
+}
+
+function CredentialForm({ mode }: { mode: "signin" | "register" }) {
+  const t = useT();
+  const [username, setUsername] = useState("");
+  const [password, setPassword] = useState("");
+  const [email, setEmail] = useState("");
+  const [name, setName] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const submit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setBusy(true);
+    setError(null);
+    try {
+      const res =
+        mode === "signin"
+          ? await loginUser({ username: username.trim(), password })
+          : await registerUser({
+              username: username.trim(),
+              password,
+              email: email.trim() || undefined,
+              display_name: name.trim() || undefined,
+            });
+      setSession(res.token, res.user);
+      location.reload();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : String(err));
+      setBusy(false);
+    }
+  };
+
+  return (
+    <form className="flex flex-col gap-3" onSubmit={submit}>
+      <p className="text-[13px] mb-1" style={{ color: "var(--fg-muted)" }}>
+        {t("login.haveAccount")}
+      </p>
+      <label className="block">
+        <div className="text-[13px] font-medium mb-1.5">{t("login.username")}</div>
+        <input className="input" value={username} onChange={(e) => setUsername(e.target.value)} autoFocus data-testid="auth-username" />
+      </label>
+      <label className="block">
+        <div className="text-[13px] font-medium mb-1.5">{t("login.password")}</div>
+        <input className="input" type="password" value={password} onChange={(e) => setPassword(e.target.value)} data-testid="auth-password" />
+      </label>
+      {mode === "register" && (
+        <>
+          <label className="block">
+            <div className="text-[13px] font-medium mb-1.5">{t("login.email")}</div>
+            <input className="input" value={email} onChange={(e) => setEmail(e.target.value)} data-testid="auth-email" />
+          </label>
+          <label className="block">
+            <div className="text-[13px] font-medium mb-1.5">{t("login.name")}</div>
+            <input className="input" value={name} onChange={(e) => setName(e.target.value)} data-testid="auth-name" />
+          </label>
+        </>
+      )}
+      {error && (
+        <div className="px-3 py-2 rounded-lg text-[12.5px] font-mono" style={{ background: "var(--bad-soft)", color: "var(--bad)" }} data-testid="auth-error">
+          {error}
+        </div>
+      )}
+      <button className="btn btn-primary w-full mt-1" disabled={busy || !username || !password} data-testid="auth-submit">
+        {busy
+          ? mode === "signin" ? t("login.signingIn") : t("login.registering")
+          : mode === "signin" ? t("login.signin") : t("login.register")}
+      </button>
+      {mode === "signin" && (
+        <p className="text-[12px] text-center mt-1" style={{ color: "var(--fg-faint)" }}>
+          {t("login.adminHint")}
+        </p>
+      )}
+    </form>
+  );
+}
+
+function DemoIdentity({ onSubmit }: { onSubmit: (id: string, name: string) => void }) {
   const t = useT();
   const [id, setId] = useState("");
   const [name, setName] = useState("");
@@ -184,70 +313,45 @@ function LoginGate({ onSubmit }: { onSubmit: (id: string, name: string) => void 
     { id: "00000000-0000-0000-0000-000000000003", name: "carol", role: t("login.role.finance") },
     { id: "00000000-0000-0000-0000-000000000009", name: "admin", role: t("login.role.admin") },
   ];
-  useEffect(() => {
-    document.body.style.overflow = "hidden";
-    return () => { document.body.style.overflow = ""; };
-  }, []);
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-3 sm:p-6"
-      style={{ background: "color-mix(in srgb, var(--bg) 60%, transparent)", backdropFilter: "blur(8px)" }}
-    >
-      <div className="card card-elevated w-full max-w-[440px] p-7 reveal">
-        <div className="flex items-center gap-3 mb-5">
-          <Mark />
-          <h2 className="text-[18px] font-semibold tracking-tight">{t("login.welcome")}</h2>
-        </div>
-        <p className="text-[14px] mb-5" style={{ color: "var(--fg-muted)" }}>
-          {t("login.pickIdentity")}
-        </p>
-
-        <div className="flex flex-col gap-2 mb-5">
-          {presets.map((p) => (
-            <button
-              key={p.id}
-              type="button"
-              onClick={() => { setId(p.id); setName(p.name); }}
-              className="flex items-center justify-between rounded-xl px-4 py-3 text-left transition-all"
-              style={{
-                background: id === p.id ? "var(--accent-soft)" : "var(--surface-2)",
-                border: id === p.id ? "1px solid var(--accent)" : "1px solid var(--border)",
-                cursor: "pointer",
-              }}
-            >
-              <div>
-                <div className="text-[14.5px] font-semibold" style={{ color: id === p.id ? "var(--accent-soft-fg)" : "var(--fg)" }}>
-                  {p.name}
-                </div>
-                <div className="text-[12.5px]" style={{ color: "var(--fg-muted)" }}>
-                  {p.role}
-                </div>
+    <div>
+      <p className="text-[13px] mb-4" style={{ color: "var(--fg-muted)" }}>
+        {t("login.demoNote")}
+      </p>
+      <div className="flex flex-col gap-2 mb-5">
+        {presets.map((p) => (
+          <button
+            key={p.id}
+            type="button"
+            onClick={() => { setId(p.id); setName(p.name); }}
+            className="flex items-center justify-between rounded-xl px-4 py-3 text-left transition-all"
+            style={{
+              background: id === p.id ? "var(--accent-soft)" : "var(--surface-2)",
+              border: id === p.id ? "1px solid var(--accent)" : "1px solid var(--border)",
+              cursor: "pointer",
+            }}
+          >
+            <div>
+              <div className="text-[14.5px] font-semibold" style={{ color: id === p.id ? "var(--accent-soft-fg)" : "var(--fg)" }}>
+                {p.name}
               </div>
-              <span className="font-mono text-[11px]" style={{ color: "var(--fg-faint)" }}>
-                {p.id.slice(0, 8)}
-              </span>
-            </button>
-          ))}
-        </div>
-
-        <details className="mb-5">
-          <summary className="text-[13px] font-medium cursor-pointer" style={{ color: "var(--fg-muted)" }}>
-            {t("login.orPaste")}
-          </summary>
-          <div className="mt-3 flex flex-col gap-2">
-            <input className="input input-mono" placeholder="00000000-…" value={id} onChange={(e) => setId(e.target.value)} />
-            <input className="input" placeholder={t("login.displayName")} value={name} onChange={(e) => setName(e.target.value)} />
-          </div>
-        </details>
-
-        <button
-          className="btn btn-primary w-full"
-          disabled={!id}
-          onClick={() => id && onSubmit(id.trim(), name.trim())}
-        >
-          {t("login.continue")}
-        </button>
+              <div className="text-[12.5px]" style={{ color: "var(--fg-muted)" }}>
+                {p.role}
+              </div>
+            </div>
+            <span className="font-mono text-[11px]" style={{ color: "var(--fg-faint)" }}>
+              {p.id.slice(0, 8)}
+            </span>
+          </button>
+        ))}
       </div>
+      <button
+        className="btn btn-primary w-full"
+        disabled={!id}
+        onClick={() => id && onSubmit(id.trim(), name.trim())}
+      >
+        {t("login.continue")}
+      </button>
     </div>
   );
 }

@@ -10,13 +10,15 @@ use axum::{
     routing::{get, post},
     Json, Router,
 };
-use chrono::Utc;
+use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
+use sqlx::Row;
 use uuid::Uuid;
 
 use skillhub_domain::department::{
     CrossScopeGrant, Department, DepartmentMembership, DepartmentRole, GrantScope,
 };
+use skillhub_domain::DomainError;
 
 use crate::error::ApiError;
 use crate::middleware::AuthPrincipal;
@@ -108,12 +110,41 @@ async fn add_member(
     Ok(Json(serde_json::json!({ "ok": true })))
 }
 
+#[derive(Debug, Serialize)]
+struct MemberDto {
+    user_id: Uuid,
+    username: String,
+    display_name: Option<String>,
+    role: String,
+    joined_at: DateTime<Utc>,
+}
+
 async fn list_members(
-    State(_state): State<Arc<AppState>>,
-    Path(_dept_id): Path<Uuid>,
-) -> Result<Json<serde_json::Value>, ApiError> {
-    // TODO: add list_for_department to the repository
-    Ok(Json(serde_json::json!({ "members": [] })))
+    State(state): State<Arc<AppState>>,
+    Path(dept_id): Path<Uuid>,
+) -> Result<Json<Vec<MemberDto>>, ApiError> {
+    let rows = sqlx::query(
+        r#"SELECT m.user_id, u.username, u.display_name, m.role, m.joined_at
+           FROM department_memberships m
+           JOIN users u ON u.id = m.user_id
+           WHERE m.department_id = $1
+           ORDER BY m.role, u.username"#,
+    )
+    .bind(dept_id)
+    .fetch_all(&state.pool)
+    .await
+    .map_err(|e| DomainError::Internal(e.to_string()))?;
+    Ok(Json(
+        rows.iter()
+            .map(|r| MemberDto {
+                user_id: r.get("user_id"),
+                username: r.get("username"),
+                display_name: r.get("display_name"),
+                role: r.get("role"),
+                joined_at: r.get("joined_at"),
+            })
+            .collect(),
+    ))
 }
 
 #[derive(Debug, Deserialize)]
