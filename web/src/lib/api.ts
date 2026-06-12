@@ -121,6 +121,10 @@ export interface Skill {
 
 export const listSkills = () => api<Skill[]>(`/skills`);
 export const getSkill = (id: string) => api<Skill>(`/skills/${id}`);
+export const getSkillBySlug = (namespace: string, slug: string) =>
+  api<Skill>(
+    `/skills/lookup?namespace=${encodeURIComponent(namespace)}&slug=${encodeURIComponent(slug)}`
+  );
 
 /* ────────────── auth ────────────── */
 
@@ -461,6 +465,28 @@ export interface Proposal {
 
 export const listProposals = (skillId: string) =>
   api<Proposal[]>(`/skills/${skillId}/proposals`);
+
+export interface ProposalReview {
+  id: string;
+  reviewer_id: string;
+  reviewer_username: string;
+  verdict: "comment" | "approve" | "request_changes" | "reject";
+  body: string | null;
+  reviewed_at: string;
+}
+
+export interface ProposalDetail extends Proposal {
+  opened_at: string;
+  draft: {
+    target_version: string;
+    summary: string | null;
+    manifest: Record<string, unknown>;
+  } | null;
+  reviews: ProposalReview[];
+}
+
+export const getProposalDetail = (skillId: string, pid: string) =>
+  api<ProposalDetail>(`/skills/${skillId}/proposals/${pid}`);
 
 export const createDraft = (
   skillId: string,

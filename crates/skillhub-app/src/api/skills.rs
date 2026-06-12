@@ -25,6 +25,8 @@ use skillhub_embeddings::SkillContent;
 pub fn routes() -> Router<Arc<AppState>> {
     Router::new()
         .route("/", get(list_all).post(create_skill))
+        // Static path: must be declared so axum prefers it over `/:id`.
+        .route("/lookup", get(lookup_by_slug))
         .route("/:id", get(get_one))
         .route("/:id/publish", post(publish_version))
         .route("/:id/versions", get(list_versions))
@@ -100,6 +102,36 @@ async fn get_one(
         .await
         .map_err(|e| DomainError::Internal(e.to_string()))?
         .ok_or_else(|| DomainError::NotFound(format!("skill {id}")))?;
+    Ok(Json(row_to_dto(row)))
+}
+
+#[derive(Debug, Deserialize)]
+struct LookupParams {
+    namespace: String,
+    slug: String,
+}
+
+/// Resolve a skill by its human-readable `namespace/slug` (for friendly URLs),
+/// honoring visibility. Same NotFound for invisible-or-absent skills.
+async fn lookup_by_slug(
+    State(state): State<Arc<AppState>>,
+    AuthPrincipal(principal): AuthPrincipal,
+    axum::extract::Query(p): axum::extract::Query<LookupParams>,
+) -> Result<Json<SkillDto>, ApiError> {
+    let uid = principal.user_id.ok_or(DomainError::Unauthorized)?;
+    let sql = format!(
+        "{SELECT_SKILL} WHERE n.slug = $3 AND s.slug = $4 AND {}",
+        authz::vis_predicate(1, 2)
+    );
+    let row = sqlx::query(&sql)
+        .bind(authz::is_super(&principal))
+        .bind(uid)
+        .bind(p.namespace.trim())
+        .bind(p.slug.trim())
+        .fetch_optional(&state.pool)
+        .await
+        .map_err(|e| DomainError::Internal(e.to_string()))?
+        .ok_or_else(|| DomainError::NotFound(format!("skill {}/{}", p.namespace, p.slug)))?;
     Ok(Json(row_to_dto(row)))
 }
 

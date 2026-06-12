@@ -48,7 +48,11 @@ export function SkillsNewPage() {
         tags: tagList(),
         manifest: { version: "0.1.0" },
       }),
-    onSuccess: (skill) => navigate({ to: "/skills/$id", params: { id: skill.id } }),
+    onSuccess: (skill) =>
+      navigate({
+        to: "/skills/$namespace/$slug",
+        params: { namespace: skill.namespace_slug, slug: skill.slug },
+      }),
   });
 
   const enough = useMemo(() => name.trim().length >= 4 && slug.trim().length >= 3, [name, slug]);

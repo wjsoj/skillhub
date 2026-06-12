@@ -8,6 +8,7 @@ import {
   ArrowLeft, Plus, GitMerge, MessageSquare, Play, Send, Loader2, ThumbsUp,
   Copy, Check, Github, FileCode, FileText, FolderTree, Package, AlertTriangle,
   Star, Download, Calendar, ExternalLink, Folder, Hash, Tag as TagIcon,
+  ChevronDown, ChevronRight,
 } from "lucide-react";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { Card } from "@/components/ui/Card";
@@ -18,7 +19,8 @@ import {
   addCollaborator,
   createDraft,
   decideProposal,
-  getSkill,
+  getSkillBySlug,
+  getProposalDetail,
   listCollaborators,
   listIterations,
   listProposals,
@@ -60,8 +62,11 @@ const trNodes = (nodes: { key: string; labelKey: TKey }[], t: TFn) =>
 
 export function SkillDetailPage() {
   const t = useT();
-  const { id } = useParams({ from: "/skills/$id" });
-  const q = useQuery({ queryKey: ["skill", id], queryFn: () => getSkill(id) });
+  const { namespace, slug } = useParams({ from: "/skills/$namespace/$slug" });
+  const q = useQuery({
+    queryKey: ["skill", namespace, slug],
+    queryFn: () => getSkillBySlug(namespace, slug),
+  });
 
   return (
     <>
@@ -734,15 +739,36 @@ const PROPOSAL_STATE_LABEL: Record<Proposal["state"], TKey> = {
   withdrawn: "detail.prop.node.withdrawn",
 };
 
+const VERDICT_LABEL: Record<string, TKey> = {
+  comment: "detail.verdict.comment",
+  approve: "detail.verdict.approve",
+  request_changes: "detail.verdict.request_changes",
+  reject: "detail.verdict.reject",
+};
+
 function ProposalRow({ p, skillId }: { p: Proposal; skillId: string }) {
   const t = useT();
   const qc = useQueryClient();
+  const [expanded, setExpanded] = useState(false);
+  const detail = useQuery({
+    queryKey: ["proposal", skillId, p.id],
+    queryFn: () => getProposalDetail(skillId, p.id),
+    enabled: expanded,
+  });
+  const refresh = () => {
+    qc.invalidateQueries({ queryKey: ["proposals", skillId] });
+    qc.invalidateQueries({ queryKey: ["proposal", skillId, p.id] });
+  };
   const decide = useMutation({
     mutationFn: (state: Proposal["state"]) => decideProposal(skillId, p.id, state),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["proposals", skillId] }),
+    onSuccess: refresh,
   });
   const comment = useMutation({
     mutationFn: () => reviewProposal(skillId, p.id, { verdict: "comment", body: "LGTM" }),
+    onSuccess: () => {
+      setExpanded(true);
+      refresh();
+    },
   });
 
   const done = p.state === "merged"
@@ -777,6 +803,15 @@ function ProposalRow({ p, skillId }: { p: Proposal; skillId: string }) {
           <div className="mt-4">
             <Stepper nodes={trNodes(PROPOSAL_NODES, t)} doneKeys={done} activeKey={p.state} />
           </div>
+          <button
+            onClick={() => setExpanded((v) => !v)}
+            className="mt-3 inline-flex items-center gap-1 text-[12.5px] font-medium"
+            style={{ color: "var(--fg-muted)", cursor: "pointer" }}
+            data-testid="proposal-details-toggle"
+          >
+            {expanded ? <ChevronDown size={13} /> : <ChevronRight size={13} />}
+            {expanded ? t("detail.prop.hideDetails") : t("detail.prop.showDetails")}
+          </button>
         </div>
         <div className="flex flex-row md:flex-col gap-2 w-full md:w-auto md:min-w-[140px]">
           <Button variant="secondary" size="sm" onClick={() => comment.mutate()} disabled={comment.isPending} data-testid="proposal-comment">
@@ -790,6 +825,54 @@ function ProposalRow({ p, skillId }: { p: Proposal; skillId: string }) {
           </Button>
         </div>
       </div>
+
+      {expanded && (
+        <div className="mt-4 pt-4" style={{ borderTop: "1px solid var(--border)" }} data-testid="proposal-detail">
+          {detail.isLoading && <Loader2 size={16} className="animate-spin" style={{ color: "var(--fg-muted)" }} />}
+          {detail.data && (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+              {/* Proposed changes (the draft) */}
+              {detail.data.draft && (
+                <div className="min-w-0">
+                  <div className="eyebrow mb-2">{t("detail.prop.draftChanges")}</div>
+                  <div className="text-[12.5px] mb-2" style={{ color: "var(--fg-muted)" }}>
+                    {t("detail.prop.targetVersion2")}:{" "}
+                    <span className="font-mono" style={{ color: "var(--fg)" }}>v{detail.data.draft.target_version}</span>
+                  </div>
+                  <pre className="text-[11.5px] font-mono p-3 rounded-lg overflow-x-auto" style={{ background: "var(--bg-muted)", color: "var(--fg-muted)", maxHeight: 220 }}>
+                    {JSON.stringify(detail.data.draft.manifest, null, 2)}
+                  </pre>
+                </div>
+              )}
+
+              {/* Review history */}
+              <div className="min-w-0">
+                <div className="eyebrow mb-2">{t("detail.prop.reviews")}</div>
+                {detail.data.reviews.length === 0 ? (
+                  <p className="text-[13px]" style={{ color: "var(--fg-faint)" }}>{t("detail.prop.noReviews")}</p>
+                ) : (
+                  <ul className="space-y-3">
+                    {detail.data.reviews.map((r) => (
+                      <li key={r.id} className="text-[13px]">
+                        <div className="flex items-baseline gap-2 flex-wrap">
+                          <span className="font-mono font-medium" style={{ color: "var(--fg)" }}>{r.reviewer_username}</span>
+                          <Badge tone={r.verdict === "approve" ? "ok" : r.verdict === "reject" ? "bad" : r.verdict === "request_changes" ? "warn" : "default"}>
+                            {t(VERDICT_LABEL[r.verdict] ?? "detail.verdict.comment")}
+                          </Badge>
+                          <span className="text-[11.5px]" style={{ color: "var(--fg-faint)" }}>
+                            {new Date(r.reviewed_at).toLocaleString()}
+                          </span>
+                        </div>
+                        {r.body && <p className="mt-0.5" style={{ color: "var(--fg-muted)" }}>{r.body}</p>}
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
     </Card>
   );
 }

@@ -308,8 +308,8 @@ function FeaturedSkill({ skill }: { skill: Skill }) {
   const version = m.version ? `v${String(m.version)}` : null;
   return (
     <Link
-      to="/skills/$id"
-      params={{ id: skill.id }}
+      to="/skills/$namespace/$slug"
+      params={{ namespace: skill.namespace_slug, slug: skill.slug }}
       className="group flex flex-col flex-1"
       style={{ cursor: "pointer" }}
     >

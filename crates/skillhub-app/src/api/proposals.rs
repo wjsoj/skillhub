@@ -11,8 +11,9 @@ use axum::{
     routing::{get, post},
     Json, Router,
 };
-use chrono::Utc;
+use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
+use sqlx::Row;
 use uuid::Uuid;
 
 use skillhub_domain::proposal::{
@@ -136,16 +137,77 @@ async fn list(
     Ok(Json(list.into_iter().map(Into::into).collect()))
 }
 
+#[derive(Debug, Serialize)]
+pub struct DraftDto {
+    pub target_version: String,
+    pub summary: Option<String>,
+    pub manifest: serde_json::Value,
+}
+
+#[derive(Debug, Serialize)]
+pub struct ReviewDto {
+    pub id: Uuid,
+    pub reviewer_id: Uuid,
+    pub reviewer_username: String,
+    pub verdict: String,
+    pub body: Option<String>,
+    pub reviewed_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct ProposalDetailDto {
+    #[serde(flatten)]
+    pub proposal: ProposalDto,
+    pub opened_at: DateTime<Utc>,
+    pub draft: Option<DraftDto>,
+    pub reviews: Vec<ReviewDto>,
+}
+
 async fn read(
     State(state): State<Arc<AppState>>,
     Path((_skill_id, pid)): Path<(Uuid, Uuid)>,
-) -> Result<Json<ProposalDto>, ApiError> {
+) -> Result<Json<ProposalDetailDto>, ApiError> {
     let p = state
         .proposals
         .find(pid)
         .await?
         .ok_or_else(|| skillhub_domain::DomainError::NotFound("proposal".into()))?;
-    Ok(Json(p.into()))
+    let opened_at = p.opened_at;
+    let draft_id = p.draft_id;
+
+    let draft = state.drafts.find(draft_id).await?.map(|d| DraftDto {
+        target_version: d.target_version,
+        summary: d.summary,
+        manifest: d.manifest,
+    });
+
+    let reviews = sqlx::query(
+        r#"SELECT r.id, r.reviewer_id, u.username AS reviewer_username,
+                  r.verdict, r.body, r.reviewed_at
+           FROM proposal_reviews r JOIN users u ON u.id = r.reviewer_id
+           WHERE r.proposal_id = $1 ORDER BY r.reviewed_at ASC"#,
+    )
+    .bind(pid)
+    .fetch_all(&state.pool)
+    .await
+    .map_err(|e| skillhub_domain::DomainError::Internal(e.to_string()))?
+    .iter()
+    .map(|r| ReviewDto {
+        id: r.get("id"),
+        reviewer_id: r.get("reviewer_id"),
+        reviewer_username: r.get("reviewer_username"),
+        verdict: r.get("verdict"),
+        body: r.get("body"),
+        reviewed_at: r.get("reviewed_at"),
+    })
+    .collect();
+
+    Ok(Json(ProposalDetailDto {
+        proposal: p.into(),
+        opened_at,
+        draft,
+        reviews,
+    }))
 }
 
 #[derive(Debug, Deserialize)]

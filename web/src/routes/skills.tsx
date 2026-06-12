@@ -136,8 +136,8 @@ function SkillRow({ skill }: { skill: Skill }) {
 
   return (
     <Link
-      to="/skills/$id"
-      params={{ id: skill.id }}
+      to="/skills/$namespace/$slug"
+      params={{ namespace: skill.namespace_slug, slug: skill.slug }}
       className="group flex items-start gap-6 py-7 -mx-2 px-2 rounded-lg transition-colors"
       style={{ cursor: "pointer" }}
     >

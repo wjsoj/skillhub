@@ -35,7 +35,7 @@ const skillsNewRoute = createRoute({
 
 const skillsDetailRoute = createRoute({
   getParentRoute: () => rootRoute,
-  path: "/skills/$id",
+  path: "/skills/$namespace/$slug",
   component: SkillDetailPage,
 });
 

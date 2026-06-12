@@ -272,6 +272,16 @@ export const en = {
   "detail.prop.comment": "Comment",
   "detail.prop.approve": "Approve",
   "detail.prop.merge": "Merge",
+  "detail.prop.showDetails": "Details",
+  "detail.prop.hideDetails": "Hide",
+  "detail.prop.reviews": "Reviews",
+  "detail.prop.noReviews": "No reviews yet.",
+  "detail.prop.draftChanges": "Proposed changes",
+  "detail.prop.targetVersion2": "Target version",
+  "detail.verdict.comment": "commented",
+  "detail.verdict.approve": "approved",
+  "detail.verdict.request_changes": "requested changes",
+  "detail.verdict.reject": "rejected",
   // collaborators tab
   "detail.collab.title": "Collaborators",
   "detail.collab.desc":
@@ -615,6 +625,16 @@ export const zh: Record<TKey, string> = {
   "detail.prop.comment": "评论",
   "detail.prop.approve": "批准",
   "detail.prop.merge": "合并",
+  "detail.prop.showDetails": "详情",
+  "detail.prop.hideDetails": "收起",
+  "detail.prop.reviews": "评审历史",
+  "detail.prop.noReviews": "暂无评审。",
+  "detail.prop.draftChanges": "提议的变更",
+  "detail.prop.targetVersion2": "目标版本",
+  "detail.verdict.comment": "评论了",
+  "detail.verdict.approve": "批准了",
+  "detail.verdict.request_changes": "要求修改",
+  "detail.verdict.reject": "驳回了",
   // collaborators tab
   "detail.collab.title": "协作者",
   "detail.collab.desc":
