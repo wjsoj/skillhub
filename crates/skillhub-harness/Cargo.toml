@@ -1,0 +1,22 @@
+[package]
+name = "skillhub-harness"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+skillhub-domain.workspace = true
+skillhub-storage = { path = "../skillhub-storage" }
+
+tokio = { workspace = true, features = ["full"] }
+async-trait.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+anyhow.workspace = true
+tracing.workspace = true
+chrono.workspace = true
+uuid.workspace = true
+sha2.workspace = true
+bytes.workspace = true
+futures.workspace = true

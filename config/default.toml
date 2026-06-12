@@ -1,0 +1,30 @@
+# Default configuration. Override per-environment via env vars
+# prefixed with `SKILLHUB__` (double underscore = nesting).
+
+[server]
+host = "0.0.0.0"
+port = 8080
+public_base_url = "http://localhost:8080"
+
+[database]
+url = "postgres://skillhub:skillhub@localhost:5432/skillhub"
+max_connections = 16
+
+[redis]
+url = "redis://localhost:6379"
+
+[storage]
+kind = "local"
+root = "./data/storage"
+
+[auth]
+jwt_secret = "change-me-in-production"
+token_prefix = "sk"
+bootstrap_admin_enabled = true
+bootstrap_admin_username = "admin"
+bootstrap_admin_password = "ChangeMe!2026"
+oauth = []
+
+[publish]
+allowed_file_extensions = [".md", ".json", ".yaml", ".yml", ".toml", ".txt", ".xsd", ".xsl", ".dtd"]
+max_package_size_mb = 50

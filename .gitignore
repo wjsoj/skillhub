@@ -1,0 +1,22 @@
+/target
+**/*.rs.bk
+Cargo.lock.bak
+
+.env
+.env.local
+.env.*.local
+
+/data
+/tmp
+*.log
+
+.idea/
+.vscode/
+.DS_Store
+
+# Frontend
+web/node_modules
+web/dist
+web/.vite
+cli/node_modules
+cli/dist

@@ -1,0 +1,49 @@
+[package]
+name = "skillhub-app"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[[bin]]
+name = "skillhub"
+path = "src/main.rs"
+
+[dependencies]
+skillhub-domain.workspace = true
+skillhub-infra.workspace = true
+skillhub-auth.workspace = true
+skillhub-storage.workspace = true
+skillhub-search.workspace = true
+skillhub-notification.workspace = true
+skillhub-embeddings.workspace = true
+skillhub-harness.workspace = true
+
+tokio.workspace = true
+axum.workspace = true
+tower.workspace = true
+tower-http.workspace = true
+hyper.workspace = true
+
+serde.workspace = true
+serde_json.workspace = true
+serde_with.workspace = true
+validator.workspace = true
+
+sqlx.workspace = true
+
+anyhow.workspace = true
+thiserror.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true
+
+uuid.workspace = true
+chrono.workspace = true
+semver.workspace = true
+url.workspace = true
+async-trait.workspace = true
+bytes.workspace = true
+futures.workspace = true
+
+metrics.workspace = true
+metrics-exporter-prometheus.workspace = true
+base64.workspace = true
