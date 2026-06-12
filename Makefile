@@ -2,7 +2,7 @@
 
 help:
 	@echo "Targets:"
-	@echo "  dev-up        start Postgres + Redis + MinIO"
+	@echo "  dev-up        start Postgres + Redis"
 	@echo "  dev-down      stop dev dependencies"
 	@echo "  dev-reset     wipe dev dependency volumes"
 	@echo "  migrate       run sqlx migrations against the dev DB"
@@ -15,7 +15,7 @@ help:
 	@echo "  web-dev       start the React frontend (placeholder)"
 
 dev-up:
-	docker compose up -d postgres redis minio
+	docker compose up -d postgres redis
 
 dev-down:
 	docker compose down

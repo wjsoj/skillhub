@@ -1,5 +1,3 @@
-version: "3.9"
-
 services:
   postgres:
     # pgvector ships an official image bundled with the extension.
@@ -27,19 +25,10 @@ services:
     volumes:
       - redisdata:/data
 
-  minio:
-    image: minio/minio:latest
-    command: server /data --console-address ":9001"
-    environment:
-      MINIO_ROOT_USER: skillhub
-      MINIO_ROOT_PASSWORD: skillhub-secret
-    ports:
-      - "9000:9000"
-      - "9001:9001"
-    volumes:
-      - miniodata:/data
+# Skill content (SKILL.md, manifest) lives in Postgres as TEXT/JSONB, so the
+# dev stack needs no object store. If you later add large binary attachments,
+# bring back a MinIO/S3 service and point `[storage]` at it.
 
 volumes:
   pgdata:
   redisdata:
-  miniodata:

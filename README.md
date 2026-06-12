@@ -64,7 +64,7 @@ curl -s https://hub.example.com/skill.md > ~/.claude/skills/skillhub/SKILL.md
 | Database | PostgreSQL 16 + SQLx (compile-time checked) |
 | Cache | Redis 7 |
 | Search | Postgres FTS (`tsvector` + GIN) + pgvector |
-| Storage | Local FS (dev) / S3 / MinIO (prod) |
+| Storage | Skill content in Postgres (TEXT/JSONB) — no object store needed |
 | Auth | argon2 + JWT + OAuth2 + prefix-hashed tokens |
 | Observability | `tracing` + Prometheus exporter |
 | Frontend | React 19 + TypeScript + Vite (under `web/`) |
@@ -84,10 +84,17 @@ curl -s https://hub.example.com/skill.md > ~/.claude/skills/skillhub/SKILL.md
                  │   (Rust)    │  OAuth2 · API Tokens · Audit
                  └──────┬──────┘
                         │
-           ┌────────────┼────────────┐
-           ▼            ▼            ▼
-      PostgreSQL 16   Redis 7   S3 / MinIO
+           ┌────────────┴────────────┐
+           ▼                         ▼
+      PostgreSQL 16              Redis 7
+   (skill content + metadata)   (cache)
 ```
+
+> Skills are text — a `SKILL.md` plus a JSON manifest and a few small files —
+> so their content lives directly in Postgres (`TEXT` / `JSONB`). There's no
+> object store in the default stack. An `ObjectStore` trait
+> (`skillhub-storage`) exists for the day skills carry large binary
+> attachments; until then it's optional and unused.
 
 Crate boundaries enforce a clean, dependency-inverted architecture:
 
@@ -103,7 +110,7 @@ skillhub/
 │   ├── skillhub-domain/         # pure domain: entities + repo traits
 │   ├── skillhub-infra/          # config, PgPool, Redis, sqlx repos
 │   ├── skillhub-auth/           # password/JWT/OAuth2/tokens + policy evaluator
-│   ├── skillhub-storage/        # ObjectStore trait + local/S3 backends
+│   ├── skillhub-storage/        # ObjectStore trait (optional; for large attachments)
 │   ├── skillhub-search/         # Postgres FTS + semantic duplicate detection
 │   ├── skillhub-embeddings/     # Embedder trait (HTTP / stub backends)
 │   ├── skillhub-harness/        # AI iteration workspace + sandboxed runner
@@ -113,7 +120,7 @@ skillhub/
 ├── skill/skillhub/              # the installable connector SKILL.md
 ├── docs/                        # design + agent guide + architecture
 ├── web/                         # React 19 frontend
-├── docker-compose.yml           # dev deps: postgres, redis, minio
+├── docker-compose.yml           # dev deps: postgres, redis
 └── Dockerfile                   # multi-stage release image
 ```
 
@@ -122,14 +129,14 @@ skillhub/
 ### Prerequisites
 
 - Rust 1.80+ (the toolchain is pinned via `rust-toolchain.toml`)
-- Docker + Docker Compose (for Postgres, Redis, MinIO)
+- Docker + Docker Compose (for Postgres + Redis)
 - Node.js + pnpm (only if working on the `web/` frontend)
 
 ### Quick start
 
 ```bash
 cp .env.example .env
-make dev-up        # start Postgres + Redis + MinIO
+make dev-up        # start Postgres + Redis
 make migrate       # apply the schema
 make run           # cargo run -p skillhub-app
 ```
@@ -175,7 +182,7 @@ Common `make` targets:
 
 | Target | Description |
 |---|---|
-| `make dev-up` / `dev-down` / `dev-reset` | Manage Postgres + Redis + MinIO |
+| `make dev-up` / `dev-down` / `dev-reset` | Manage Postgres + Redis |
 | `make migrate` | Run sqlx migrations against the dev DB |
 | `make run` | Run the backend |
 | `make build` | Release build of `skillhub-app` |
@@ -187,15 +194,18 @@ Common `make` targets:
 
 - **M0 — scaffold:** workspace, domain traits, schema, app skeleton. ✅
 - **M1 — vertical slice:** users + namespaces + skills + publish + Postgres FTS. ✅
-- **M2 — governance:** reviews, audit, RBAC, OAuth2 providers, S3 backend, JWT & API tokens. 🚧
+- **M2 — governance:** reviews, audit, RBAC, OAuth2 providers, JWT & API tokens. 🚧
 
 M1 is implemented end-to-end: real registration/login with Argon2 + JWT,
 API tokens (`Authorization: ApiToken sk_…`), user/namespace directories,
 skill creation & version publishing, weighted Postgres full-text search,
 a cross-skill review queue, stars, and a `clawhub`-compatible `/cli/install`
-that resolves a skill and counts the install. M2 is partially landed (JWT &
-API tokens done; proposal/iteration governance done); OAuth2 providers and an
-S3 storage backend are the remaining gaps.
+that resolves a skill and counts the install. Authorization is enforced
+throughout (namespace/skill ownership checks, default-deny visibility
+filtering, PII redaction). M2 is partially landed (JWT & API tokens done;
+proposal/iteration governance done); OAuth2 providers are the remaining gap.
+An object-store backend is only needed if skills grow large binary
+attachments — not part of the default text-in-Postgres model.
 
 See [docs/design.md](docs/design.md) for the full design narrative and
 [docs/architecture.md](docs/architecture.md) for the architecture overview.

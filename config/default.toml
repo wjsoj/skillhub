@@ -13,6 +13,9 @@ max_connections = 16
 [redis]
 url = "redis://localhost:6379"
 
+# Skill content lives in Postgres (TEXT/JSONB); this object-store config is
+# currently unused. It only matters if you wire up large binary attachments —
+# switch `kind = "s3"` and add the bucket/credentials fields then.
 [storage]
 kind = "local"
 root = "./data/storage"
