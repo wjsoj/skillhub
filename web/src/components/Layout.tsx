@@ -5,26 +5,34 @@ import { useEffect, useState } from "react";
 import { clearMockUser, getMockUser, setMockUser } from "@/lib/api";
 import { cn } from "@/lib/cn";
 import { ThemeToggle } from "@/components/ui/ThemeToggle";
+import { LocaleToggle } from "@/components/ui/LocaleToggle";
+import { AmbientBackdrop } from "@/components/ambient/AmbientBackdrop";
+import { useT } from "@/i18n";
+import type { TKey } from "@/i18n/dict";
 
 const NAV = [
-  { to: "/", label: "Home" },
-  { to: "/skills", label: "Skills" },
-  { to: "/orgs", label: "Org" },
-  { to: "/grants", label: "Grants" },
-  { to: "/audit", label: "Audit" },
-] as const;
+  { to: "/", label: "nav.home" },
+  { to: "/skills", label: "nav.skills" },
+  { to: "/orgs", label: "nav.org" },
+  { to: "/grants", label: "nav.grants" },
+  { to: "/audit", label: "nav.audit" },
+] as const satisfies ReadonlyArray<{ to: string; label: TKey }>;
 
 export function Layout() {
+  const t = useT();
   const user = getMockUser();
   const [drawer, setDrawer] = useState(false);
   const [showLogin, setShowLogin] = useState(!user);
 
   return (
     <div className="relative" style={{ background: "var(--bg)", minHeight: "100vh" }}>
+      <AmbientBackdrop />
+
+      <div className="relative" style={{ zIndex: 1 }}>
       <TopBar user={user} onMenu={() => setDrawer(true)} onLogout={() => { clearMockUser(); location.reload(); }} />
 
       <main className="px-5 sm:px-8 lg:px-12 pb-24" style={{ minHeight: "calc(100vh - 64px - 80px)" }}>
-        <div className="mx-auto w-full max-w-[1080px]">
+        <div className="mx-auto w-full max-w-[1140px]">
           <Outlet />
         </div>
       </main>
@@ -33,9 +41,10 @@ export function Layout() {
         className="px-5 sm:px-8 lg:px-12 py-7 text-[13px] flex items-center justify-between"
         style={{ color: "var(--fg-subtle)", borderTop: "1px solid var(--border)" }}
       >
-        <span>SkillHub · a private skill registry</span>
+        <span>SkillHub · {t("footer.tagline")}</span>
         <span className="font-mono text-[11.5px]">v0.1</span>
       </footer>
+      </div>
 
       {/* Mobile drawer */}
       <Dialog.Root open={drawer} onOpenChange={setDrawer}>
@@ -49,9 +58,9 @@ export function Layout() {
             style={{ background: "var(--surface)", border: "1px solid var(--border)" }}
           >
             <div className="flex items-center justify-between mb-5">
-              <Dialog.Title className="text-[15px] font-semibold">Navigate</Dialog.Title>
+              <Dialog.Title className="text-[15px] font-semibold">{t("nav.navigate")}</Dialog.Title>
               <Dialog.Close asChild>
-                <button className="btn btn-ghost btn-icon" aria-label="Close"><X size={16} /></button>
+                <button className="btn btn-ghost btn-icon" aria-label={t("org.cancel")}><X size={16} /></button>
               </Dialog.Close>
             </div>
             <nav className="flex flex-col gap-1">
@@ -62,7 +71,7 @@ export function Layout() {
                   onClick={() => setDrawer(false)}
                   className="nav-link justify-between"
                 >
-                  {n.label}
+                  {t(n.label)}
                 </Link>
               ))}
             </nav>
@@ -92,6 +101,7 @@ function TopBar({
   onMenu: () => void;
   onLogout: () => void;
 }) {
+  const t = useT();
   const state = useRouterState();
   const path = state.location.pathname;
   const isActive = (to: string) =>
@@ -118,24 +128,25 @@ function TopBar({
         <nav className="ml-6 hidden md:flex items-center gap-1">
           {NAV.map((n) => (
             <Link key={n.to} to={n.to} className={cn("nav-link", isActive(n.to) && "active")}>
-              {n.label}
+              {t(n.label)}
             </Link>
           ))}
         </nav>
 
         <div className="flex-1" />
 
+        <LocaleToggle />
         <ThemeToggle />
 
         {user ? (
           <div className="flex items-center gap-2 pl-2 md:pl-3" style={{ borderLeft: "1px solid var(--border)" }}>
             <div className="hidden sm:flex flex-col items-end leading-tight">
-              <span className="text-[13.5px] font-medium">{user.name || "User"}</span>
+              <span className="text-[13.5px] font-medium">{user.name || t("shell.user")}</span>
               <span className="font-mono text-[10.5px]" style={{ color: "var(--fg-faint)" }}>
                 {user.id.slice(0, 8)}
               </span>
             </div>
-            <button onClick={onLogout} aria-label="Sign out" className="btn btn-ghost btn-icon">
+            <button onClick={onLogout} aria-label={t("shell.signOut")} className="btn btn-ghost btn-icon">
               <LogOut size={15} />
             </button>
           </div>
@@ -165,12 +176,13 @@ function Mark() {
 }
 
 function LoginGate({ onSubmit }: { onSubmit: (id: string, name: string) => void }) {
+  const t = useT();
   const [id, setId] = useState("");
   const [name, setName] = useState("");
   const presets = [
-    { id: "00000000-0000-0000-0000-000000000001", name: "ada",   role: "data team" },
-    { id: "00000000-0000-0000-0000-000000000003", name: "carol", role: "finance team" },
-    { id: "00000000-0000-0000-0000-000000000009", name: "admin", role: "platform admin" },
+    { id: "00000000-0000-0000-0000-000000000001", name: "ada",   role: t("login.role.data") },
+    { id: "00000000-0000-0000-0000-000000000003", name: "carol", role: t("login.role.finance") },
+    { id: "00000000-0000-0000-0000-000000000009", name: "admin", role: t("login.role.admin") },
   ];
   useEffect(() => {
     document.body.style.overflow = "hidden";
@@ -184,10 +196,10 @@ function LoginGate({ onSubmit }: { onSubmit: (id: string, name: string) => void 
       <div className="card card-elevated w-full max-w-[440px] p-7 reveal">
         <div className="flex items-center gap-3 mb-5">
           <Mark />
-          <h2 className="text-[18px] font-semibold tracking-tight">Welcome to SkillHub</h2>
+          <h2 className="text-[18px] font-semibold tracking-tight">{t("login.welcome")}</h2>
         </div>
         <p className="text-[14px] mb-5" style={{ color: "var(--fg-muted)" }}>
-          Pick a demo identity to continue.
+          {t("login.pickIdentity")}
         </p>
 
         <div className="flex flex-col gap-2 mb-5">
@@ -220,11 +232,11 @@ function LoginGate({ onSubmit }: { onSubmit: (id: string, name: string) => void 
 
         <details className="mb-5">
           <summary className="text-[13px] font-medium cursor-pointer" style={{ color: "var(--fg-muted)" }}>
-            Or paste a different UUID…
+            {t("login.orPaste")}
           </summary>
           <div className="mt-3 flex flex-col gap-2">
             <input className="input input-mono" placeholder="00000000-…" value={id} onChange={(e) => setId(e.target.value)} />
-            <input className="input" placeholder="display name" value={name} onChange={(e) => setName(e.target.value)} />
+            <input className="input" placeholder={t("login.displayName")} value={name} onChange={(e) => setName(e.target.value)} />
           </div>
         </details>
 
@@ -233,7 +245,7 @@ function LoginGate({ onSubmit }: { onSubmit: (id: string, name: string) => void 
           disabled={!id}
           onClick={() => id && onSubmit(id.trim(), name.trim())}
         >
-          Continue
+          {t("login.continue")}
         </button>
       </div>
     </div>

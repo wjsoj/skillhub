@@ -5,10 +5,20 @@ import { useMemo, useState } from "react";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { Badge, Tag } from "@/components/ui/Badge";
 import { listSkills, type Skill } from "@/lib/api";
+import { useT } from "@/i18n";
+import type { TKey } from "@/i18n/dict";
 
 type Vis = "all" | "private" | "team" | "global";
 
+const VIS_LABEL: Record<Vis, TKey> = {
+  all: "skills.filter.all",
+  private: "skills.filter.private",
+  team: "skills.filter.team",
+  global: "skills.filter.global",
+};
+
 export function SkillsListPage() {
+  const t = useT();
   const q = useQuery({ queryKey: ["skills"], queryFn: listSkills });
   const [query, setQuery] = useState("");
   const [vis, setVis] = useState<Vis>("all");
@@ -26,16 +36,16 @@ export function SkillsListPage() {
   return (
     <>
       <PageHeader
-        eyebrow="Skills"
+        eyebrow={t("skills.eyebrow")}
         title={
           <>
-            Everything <span className="serif-em">you can see.</span>
+            {t("skills.titleLead")}<span className="serif-em">{t("skills.titleEm")}</span>
           </>
         }
-        description="Skills from your own team, plus anything you've been granted access to. Cross-department records you don't have a grant for simply don't appear."
+        description={t("skills.desc")}
         actions={
           <Link to="/skills/new" className="btn btn-primary">
-            <Plus size={15} /> New skill
+            <Plus size={15} /> {t("skills.new")}
           </Link>
         }
       />
@@ -47,7 +57,7 @@ export function SkillsListPage() {
           <input
             className="input"
             style={{ paddingLeft: 38, borderRadius: 999 }}
-            placeholder="Search by name, slug, or tag…"
+            placeholder={t("skills.search")}
             value={query}
             onChange={(e) => setQuery(e.target.value)}
           />
@@ -57,14 +67,14 @@ export function SkillsListPage() {
             <button
               key={v}
               onClick={() => setVis(v)}
-              className="px-3.5 h-8 text-[13px] font-medium rounded-full transition-colors capitalize"
+              className="px-3.5 h-8 text-[13px] font-medium rounded-full transition-colors"
               style={
                 vis === v
                   ? { background: "var(--surface)", color: "var(--fg)", cursor: "pointer" }
                   : { color: "var(--fg-muted)", cursor: "pointer" }
               }
             >
-              {v}
+              {t(VIS_LABEL[v])}
             </button>
           ))}
         </div>
@@ -83,8 +93,8 @@ export function SkillsListPage() {
 
       {!q.isLoading && filtered.length === 0 && (
         <div className="py-20 text-center">
-          <div className="text-[16px] font-medium mb-1">Nothing matches</div>
-          <p className="text-[13px]" style={{ color: "var(--fg-muted)" }}>Try a different search or visibility filter.</p>
+          <div className="text-[16px] font-medium mb-1">{t("skills.empty.title")}</div>
+          <p className="text-[13px]" style={{ color: "var(--fg-muted)" }}>{t("skills.empty.body")}</p>
         </div>
       )}
 
@@ -104,6 +114,7 @@ export function SkillsListPage() {
 }
 
 function SkillRow({ skill }: { skill: Skill }) {
+  const t = useT();
   const m = skill.manifest ?? {};
   const version = m.version ? `v${String(m.version)}` : null;
   const category = m.category ? String(m.category) : null;
@@ -124,7 +135,7 @@ function SkillRow({ skill }: { skill: Skill }) {
             <span className="text-[11.5px] font-mono" style={{ color: "var(--fg-faint)" }}>{version}</span>
           )}
           {m.deprecated ? (
-            <Badge tone="bad">deprecated</Badge>
+            <Badge tone="bad">{t("skills.deprecated")}</Badge>
           ) : null}
         </div>
         <h3 className="text-[20px] font-semibold tracking-tight group-hover:text-[var(--accent)] transition-colors">
@@ -146,10 +157,10 @@ function SkillRow({ skill }: { skill: Skill }) {
 
       <div className="text-right flex-shrink-0 hidden sm:flex sm:flex-col sm:items-end gap-1">
         <Badge tone={skill.visibility === "global" ? "info" : skill.visibility === "team" ? "default" : "warn"}>
-          {skill.visibility}
+          {t(VIS_LABEL[skill.visibility])}
         </Badge>
         <span className="text-[12.5px]" style={{ color: "var(--fg-muted)" }}>
-          {formatNum(skill.install_count)} installs
+          {t("skills.installs", { count: formatNum(skill.install_count) })}
         </span>
       </div>
     </Link>

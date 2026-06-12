@@ -5,10 +5,12 @@ import { PageHeader } from "@/components/ui/PageHeader";
 import { Badge } from "@/components/ui/Badge";
 import { addDepartmentMember, createDepartment, listDepartments, type Department } from "@/lib/api";
 import { cn } from "@/lib/cn";
+import { useT } from "@/i18n";
 
 const DEFAULT_ORG_ID = "10000000-0000-0000-0000-0000000000aa";
 
 export function OrgsPage() {
+  const t = useT();
   const qc = useQueryClient();
   const q = useQuery({ queryKey: ["departments", DEFAULT_ORG_ID], queryFn: () => listDepartments(DEFAULT_ORG_ID) });
 
@@ -20,19 +22,19 @@ export function OrgsPage() {
   return (
     <>
       <PageHeader
-        eyebrow="Org"
+        eyebrow={t("org.eyebrow")}
         title={
           <>
-            Who can <span className="serif-em">see what.</span>
+            {t("org.titleLead")}<span className="serif-em">{t("org.titleEm")}</span>
           </>
         }
-        description="Departments are the basic unit of access. People belong to a department, skills belong to a department through their namespace, and crossing the line takes a written grant."
+        description={t("org.desc")}
         actions={
           <button
             onClick={() => setAdding((v) => !v)}
             className="btn btn-secondary"
           >
-            <Plus size={14} /> {adding ? "Cancel" : "Add a department"}
+            <Plus size={14} /> {adding ? t("org.cancel") : t("org.addDept")}
           </button>
         }
       />
@@ -53,7 +55,7 @@ export function OrgsPage() {
       <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_minmax(0,360px)] gap-12">
         {/* Tree */}
         <div>
-          <h3 className="text-[15px] font-semibold mb-4">Departments</h3>
+          <h3 className="text-[15px] font-semibold mb-4">{t("org.departments")}</h3>
           {q.isLoading && <Loader2 size={18} className="animate-spin" style={{ color: "var(--fg-muted)" }} />}
           {tree.length > 0 && (
             <Tree
@@ -78,7 +80,7 @@ export function OrgsPage() {
           {!selected ? (
             <div className="py-12 text-center">
               <p className="text-[14px]" style={{ color: "var(--fg-muted)" }}>
-                Pick a department to manage members.
+                {t("org.pickDept")}
               </p>
             </div>
           ) : (
@@ -173,6 +175,7 @@ function CreateDept({
   parents: Department[];
   onCreated: () => void;
 }) {
+  const t = useT();
   const [slug, setSlug] = useState("");
   const [name, setName] = useState("");
   const [parent, setParent] = useState("");
@@ -188,19 +191,20 @@ function CreateDept({
       onSubmit={(e) => { e.preventDefault(); if (slug && name) create.mutate(); }}
     >
       <select className="select w-full sm:w-[160px]" value={parent} onChange={(e) => setParent(e.target.value)} data-testid="dept-parent">
-        <option value="">(top level)</option>
+        <option value="">{t("org.topLevel")}</option>
         {parents.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
       </select>
-      <input className="input input-mono w-full sm:w-[160px]" value={slug} onChange={(e) => setSlug(e.target.value)} placeholder="slug" data-testid="dept-slug" />
-      <input className="input w-full sm:flex-1" value={name} onChange={(e) => setName(e.target.value)} placeholder="Department name" data-testid="dept-name" />
+      <input className="input input-mono w-full sm:w-[160px]" value={slug} onChange={(e) => setSlug(e.target.value)} placeholder={t("org.ph.slug")} data-testid="dept-slug" />
+      <input className="input w-full sm:flex-1" value={name} onChange={(e) => setName(e.target.value)} placeholder={t("org.ph.deptName")} data-testid="dept-name" />
       <button className="btn btn-primary" disabled={!slug || !name || create.isPending} data-testid="dept-create">
-        {create.isPending ? <Loader2 size={14} className="animate-spin" /> : "Add"}
+        {create.isPending ? <Loader2 size={14} className="animate-spin" /> : t("common.add")}
       </button>
     </form>
   );
 }
 
 function MembersPanel({ dept }: { dept: Department }) {
+  const t = useT();
   const [userId, setUserId] = useState("");
   const [role, setRole] = useState<"director" | "manager" | "member">("member");
   const add = useMutation({
@@ -210,11 +214,11 @@ function MembersPanel({ dept }: { dept: Department }) {
 
   return (
     <div>
-      <div className="text-[13px] mb-1" style={{ color: "var(--fg-subtle)" }}>Selected</div>
+      <div className="text-[13px] mb-1" style={{ color: "var(--fg-subtle)" }}>{t("org.selected")}</div>
       <h3 className="display-2 mb-1">{dept.name}</h3>
       <div className="font-mono text-[11.5px] mb-7" style={{ color: "var(--fg-faint)" }}>{dept.id}</div>
 
-      <h4 className="text-[14px] font-semibold mb-3">Add a member</h4>
+      <h4 className="text-[14px] font-semibold mb-3">{t("org.addMember")}</h4>
       <form
         className="space-y-3"
         onSubmit={(e) => { e.preventDefault(); if (userId) add.mutate(); }}
@@ -223,19 +227,19 @@ function MembersPanel({ dept }: { dept: Department }) {
           className="input input-mono"
           value={userId}
           onChange={(e) => setUserId(e.target.value)}
-          placeholder="user uuid"
+          placeholder={t("org.ph.userUuid")}
           data-testid="member-user"
         />
         <select className="select" value={role} onChange={(e) => setRole(e.target.value as typeof role)} data-testid="member-role">
-          <option value="member">Member</option>
-          <option value="manager">Manager</option>
-          <option value="director">Director</option>
+          <option value="member">{t("org.role.member")}</option>
+          <option value="manager">{t("org.role.manager")}</option>
+          <option value="director">{t("org.role.director")}</option>
         </select>
         <div className="flex items-center gap-3">
           <button className="btn btn-primary" disabled={!userId || add.isPending} data-testid="member-add">
-            {add.isPending ? <><Loader2 size={14} className="animate-spin" /> Adding…</> : "Add"}
+            {add.isPending ? <><Loader2 size={14} className="animate-spin" /> {t("org.adding")}</> : t("common.add")}
           </button>
-          {add.isSuccess && <Badge tone="ok">added</Badge>}
+          {add.isSuccess && <Badge tone="ok">{t("common.added")}</Badge>}
           {add.error && <Badge tone="bad">{(add.error as Error).message}</Badge>}
         </div>
       </form>

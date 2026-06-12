@@ -346,4 +346,97 @@
     animation: reveal 520ms var(--ease-out-expo) forwards;
   }
   @keyframes reveal { to { opacity: 1; transform: translateY(0); } }
+
+  /* ── Ambient backdrop ────────────────────────────────────────────────
+     Fixed, behind everything, never interactive. A gradient mesh + grain
+     base (always on) with an optional WebGL particle canvas layered above. */
+  .ambient-root {
+    position: fixed; inset: 0; z-index: 0;
+    pointer-events: none; overflow: hidden;
+  }
+  .ambient-mesh {
+    position: absolute; inset: -10%;
+    background:
+      radial-gradient(38% 44% at 82% 8%,
+        color-mix(in srgb, var(--accent) 18%, transparent) 0%, transparent 70%),
+      radial-gradient(42% 50% at 12% 96%,
+        color-mix(in srgb, var(--info) 14%, transparent) 0%, transparent 72%),
+      radial-gradient(30% 36% at 50% 50%,
+        color-mix(in srgb, var(--accent) 6%, transparent) 0%, transparent 80%);
+    filter: blur(8px);
+    opacity: 0.9;
+    animation: mesh-drift 26s ease-in-out infinite alternate;
+  }
+  .dark .ambient-mesh { opacity: 0.7; }
+  @keyframes mesh-drift {
+    0%   { transform: translate3d(0,0,0) scale(1); }
+    100% { transform: translate3d(-2%, 1.5%, 0) scale(1.06); }
+  }
+  .ambient-grain {
+    position: absolute; inset: 0;
+    opacity: 0.5;
+    mix-blend-mode: soft-light;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+    background-size: 140px 140px;
+  }
+  .dark .ambient-grain { opacity: 0.32; }
+  .ambient-canvas {
+    position: absolute;
+    top: -8%; right: -6%;
+    width: min(62vw, 760px); height: min(80vh, 720px);
+    opacity: 0.5;
+    mask-image: radial-gradient(closest-side, #000 55%, transparent 100%);
+    -webkit-mask-image: radial-gradient(closest-side, #000 55%, transparent 100%);
+  }
+  .dark .ambient-canvas { opacity: 0.62; }
+
+  /* ── Glass bento tile ───────────────────────────────────────────────── */
+  .tile {
+    position: relative;
+    background: color-mix(in srgb, var(--surface) 72%, transparent);
+    -webkit-backdrop-filter: saturate(140%) blur(14px);
+    backdrop-filter: saturate(140%) blur(14px);
+    border: 1px solid color-mix(in srgb, var(--border-strong) 60%, transparent);
+    border-radius: var(--radius-lg);
+    box-shadow:
+      0 1px 0 0 color-mix(in srgb, #fff 50%, transparent) inset,
+      0 18px 40px -28px rgba(20, 18, 12, 0.28);
+    transition: border-color 240ms var(--ease-out-expo),
+                box-shadow 240ms var(--ease-out-expo);
+  }
+  .dark .tile {
+    box-shadow:
+      0 1px 0 0 color-mix(in srgb, #fff 7%, transparent) inset,
+      0 22px 48px -30px rgba(0, 0, 0, 0.7);
+  }
+  .tile-hover:hover {
+    border-color: color-mix(in srgb, var(--accent) 50%, var(--border-strong));
+    box-shadow:
+      0 1px 0 0 color-mix(in srgb, #fff 50%, transparent) inset,
+      0 26px 56px -30px color-mix(in srgb, var(--accent) 34%, rgba(20,18,12,0.3));
+  }
+  .dark .tile-hover:hover {
+    box-shadow:
+      0 1px 0 0 color-mix(in srgb, #fff 8%, transparent) inset,
+      0 28px 60px -32px color-mix(in srgb, var(--accent) 40%, rgba(0,0,0,0.7));
+  }
+
+  /* Eyebrow label — uppercase mono micro-heading for tiles */
+  .eyebrow {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    font-weight: 500;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--fg-subtle);
+  }
+
+  /* Big stat numeral */
+  .stat-num {
+    font-family: var(--font-sans);
+    font-weight: 600;
+    letter-spacing: -0.04em;
+    line-height: 0.95;
+    font-variant-numeric: tabular-nums;
+  }
 }

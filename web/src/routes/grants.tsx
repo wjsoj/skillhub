@@ -4,8 +4,10 @@ import { Plus, Loader2 } from "lucide-react";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { Badge } from "@/components/ui/Badge";
 import { createGrant } from "@/lib/api";
+import { useT } from "@/i18n";
 
 export function GrantsPage() {
+  const t = useT();
   const [granteeDept, setGranteeDept] = useState("");
   const [granteeUser, setGranteeUser] = useState("");
   const [targetSkill, setTargetSkill] = useState("");
@@ -32,19 +34,19 @@ export function GrantsPage() {
   return (
     <>
       <PageHeader
-        eyebrow="Grants"
+        eyebrow={t("grants.eyebrow")}
         title={
           <>
-            Borrow, <span className="serif-em">with a paper trail.</span>
+            {t("grants.titleLead")}<span className="serif-em">{t("grants.titleEm")}</span>
           </>
         }
-        description="A grant lets someone outside the home department read or write a specific skill. Every grant is written down — who, what, why, and for how long."
+        description={t("grants.desc")}
       />
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-12">
         {/* Form */}
         <section>
-          <h3 className="text-[15px] font-semibold mb-4">Open a grant</h3>
+          <h3 className="text-[15px] font-semibold mb-4">{t("grants.open")}</h3>
           <form
             className="space-y-4"
             onSubmit={(e) => {
@@ -53,29 +55,29 @@ export function GrantsPage() {
             }}
           >
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <Field label="To a department (id)">
-                <input className="input input-mono" value={granteeDept} onChange={(e) => setGranteeDept(e.target.value)} placeholder="dept uuid (optional)" data-testid="grant-dept" />
+              <Field label={t("grants.field.dept")}>
+                <input className="input input-mono" value={granteeDept} onChange={(e) => setGranteeDept(e.target.value)} placeholder={t("grants.ph.dept")} data-testid="grant-dept" />
               </Field>
-              <Field label="…or to a person (id)">
-                <input className="input input-mono" value={granteeUser} onChange={(e) => setGranteeUser(e.target.value)} placeholder="user uuid (optional)" data-testid="grant-user" />
+              <Field label={t("grants.field.user")}>
+                <input className="input input-mono" value={granteeUser} onChange={(e) => setGranteeUser(e.target.value)} placeholder={t("grants.ph.user")} data-testid="grant-user" />
               </Field>
-              <Field label="On this skill (id)">
-                <input className="input input-mono" value={targetSkill} onChange={(e) => setTargetSkill(e.target.value)} placeholder="skill uuid" data-testid="grant-target" />
+              <Field label={t("grants.field.skill")}>
+                <input className="input input-mono" value={targetSkill} onChange={(e) => setTargetSkill(e.target.value)} placeholder={t("grants.ph.skill")} data-testid="grant-target" />
               </Field>
-              <Field label="Can do what">
+              <Field label={t("grants.field.scope")}>
                 <select className="select" value={scope} onChange={(e) => setScope(e.target.value as typeof scope)} data-testid="grant-scope">
-                  <option value="read">Read</option>
-                  <option value="write">Write</option>
-                  <option value="admin">Admin</option>
+                  <option value="read">{t("grants.scope.read")}</option>
+                  <option value="write">{t("grants.scope.write")}</option>
+                  <option value="admin">{t("grants.scope.admin")}</option>
                 </select>
               </Field>
             </div>
-            <Field label="Why">
-              <input className="input" value={reason} onChange={(e) => setReason(e.target.value)} placeholder="Q2 close — finance needs read access for reconciliation." data-testid="grant-reason" />
+            <Field label={t("grants.field.why")}>
+              <input className="input" value={reason} onChange={(e) => setReason(e.target.value)} placeholder={t("grants.ph.why")} data-testid="grant-reason" />
             </Field>
             <div className="flex items-center gap-3 pt-2">
               <button className="btn btn-primary" disabled={!reason || !targetSkill || grant.isPending} data-testid="grant-create">
-                {grant.isPending ? <><Loader2 size={14} className="animate-spin" /> Creating…</> : <><Plus size={14} /> Create grant</>}
+                {grant.isPending ? <><Loader2 size={14} className="animate-spin" /> {t("grants.creating")}</> : <><Plus size={14} /> {t("grants.create")}</>}
               </button>
               {grant.error && <Badge tone="bad">{(grant.error as Error).message}</Badge>}
             </div>
@@ -84,10 +86,10 @@ export function GrantsPage() {
 
         {/* Ledger */}
         <section>
-          <h3 className="text-[15px] font-semibold mb-4">Recent grants</h3>
+          <h3 className="text-[15px] font-semibold mb-4">{t("grants.recent")}</h3>
           {granted.length === 0 ? (
             <p className="text-[13.5px]" style={{ color: "var(--fg-muted)" }}>
-              Nothing issued yet in this session.
+              {t("grants.none")}
             </p>
           ) : (
             <ul>

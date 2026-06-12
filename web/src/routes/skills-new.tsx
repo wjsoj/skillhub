@@ -6,8 +6,11 @@ import { PageHeader } from "@/components/ui/PageHeader";
 import { Badge, Tag } from "@/components/ui/Badge";
 import { Meter } from "@/components/ui/Meter";
 import { checkDuplicate, type DuplicateReport } from "@/lib/api";
+import { useT } from "@/i18n";
+import type { TKey } from "@/i18n/dict";
 
 export function SkillsNewPage() {
+  const t = useT();
   const [name, setName] = useState("");
   const [slug, setSlug] = useState("");
   const [description, setDescription] = useState("");
@@ -34,16 +37,16 @@ export function SkillsNewPage() {
   return (
     <>
       <Link to="/skills" className="inline-flex items-center gap-1 text-[13.5px] mt-2 mb-2" style={{ color: "var(--fg-muted)" }}>
-        <ArrowLeft size={13} /> All skills
+        <ArrowLeft size={13} /> {t("new.back")}
       </Link>
       <PageHeader
-        eyebrow="New skill"
+        eyebrow={t("new.eyebrow")}
         title={
           <>
-            What does it <span className="serif-em">do</span>?
+            {t("new.titleLead")}<span className="serif-em">{t("new.titleEm")}</span>{t("new.titleTail")}
           </>
         }
-        description="Give it a name and a one-line description. We'll quietly check the rest of the registry for anything that does the same thing before you publish."
+        description={t("new.desc")}
       />
 
       <div className="grid grid-cols-1 lg:grid-cols-[1fr_380px] gap-12">
@@ -52,7 +55,7 @@ export function SkillsNewPage() {
           className="space-y-7"
           onSubmit={(e) => { e.preventDefault(); dup.mutate(); }}
         >
-          <Field label="Name">
+          <Field label={t("new.field.name")}>
             <input
               data-testid="field-name"
               className="input input-lg"
@@ -62,7 +65,7 @@ export function SkillsNewPage() {
               placeholder="PDF parser"
             />
           </Field>
-          <Field label="Slug" hint="Lower-case, no spaces. Used in URLs.">
+          <Field label={t("new.field.slug")} hint={t("new.field.slugHint")}>
             <input
               data-testid="field-slug"
               className="input input-mono"
@@ -71,7 +74,7 @@ export function SkillsNewPage() {
               placeholder="pdf-parser"
             />
           </Field>
-          <Field label="One line about it">
+          <Field label={t("new.field.desc")}>
             <input
               data-testid="field-description"
               className="input"
@@ -80,7 +83,7 @@ export function SkillsNewPage() {
               placeholder="Extract text and tables from PDF documents."
             />
           </Field>
-          <Field label="Tags" hint="Comma-separated.">
+          <Field label={t("new.field.tags")} hint={t("new.field.tagsHint")}>
             <input
               data-testid="field-tags"
               className="input input-mono"
@@ -89,14 +92,14 @@ export function SkillsNewPage() {
               placeholder="pdf, text, tables, ocr"
             />
           </Field>
-          <Field label="A few notes" hint="Optional. Markdown is fine.">
+          <Field label={t("new.field.notes")} hint={t("new.field.notesHint")}>
             <textarea
               data-testid="field-readme"
               className="textarea"
               rows={5}
               value={readme}
               onChange={(e) => setReadme(e.target.value)}
-              placeholder="Purpose, inputs, outputs, edge cases…"
+              placeholder={t("new.ph.notes")}
             />
           </Field>
 
@@ -107,7 +110,7 @@ export function SkillsNewPage() {
               disabled={!enough || dup.isPending}
               data-testid="btn-check"
             >
-              {dup.isPending ? <><Loader2 size={14} className="animate-spin" /> Checking…</> : <><Sparkles size={14} /> Check for duplicates</>}
+              {dup.isPending ? <><Loader2 size={14} className="animate-spin" /> {t("new.checking")}</> : <><Sparkles size={14} /> {t("new.check")}</>}
             </button>
             <button
               type="button"
@@ -115,11 +118,11 @@ export function SkillsNewPage() {
               disabled={!enough || (!!high && !override)}
               data-testid="btn-submit"
             >
-              Publish
+              {t("new.publish")}
             </button>
             {high && !override && (
               <span className="text-[13px]" style={{ color: "var(--bad)" }}>
-                Looks like a duplicate. Confirm below.
+                {t("new.dupWarn")}
               </span>
             )}
           </div>
@@ -127,7 +130,7 @@ export function SkillsNewPage() {
           {high && (
             <label className="flex items-start gap-2 text-[13px] cursor-pointer mt-2" style={{ color: "var(--fg-muted)" }}>
               <input type="checkbox" checked={override} onChange={(e) => setOverride(e.target.checked)} />
-              I've looked at <span className="font-mono">{high.hit.namespace_slug}/{high.hit.slug}</span> and this is something different.
+              {t("new.dupConfirmPre")} <span className="font-mono">{high.hit.namespace_slug}/{high.hit.slug}</span> {t("new.dupConfirmPost")}
             </label>
           )}
 
@@ -141,10 +144,10 @@ export function SkillsNewPage() {
         {/* Side: matches */}
         <aside className="lg:sticky lg:top-24 self-start space-y-3">
           <div className="flex items-baseline justify-between mb-3">
-            <h3 className="text-[15px] font-semibold">Similar skills</h3>
+            <h3 className="text-[15px] font-semibold">{t("new.similar")}</h3>
             {report && (
               <span className="text-[12px]" style={{ color: "var(--fg-faint)" }}>
-                {report.candidates.length} found
+                {t("common.found", { count: report.candidates.length })}
               </span>
             )}
           </div>
@@ -153,7 +156,7 @@ export function SkillsNewPage() {
             <div className="py-12 text-center">
               <Sparkles size={20} className="mx-auto mb-2" style={{ color: "var(--fg-faint)" }} />
               <p className="text-[13px] max-w-[260px] mx-auto" style={{ color: "var(--fg-muted)" }}>
-                Type a name and a slug. We'll compare against everything you can see.
+                {t("new.emptyHint")}
               </p>
             </div>
           )}
@@ -163,10 +166,10 @@ export function SkillsNewPage() {
               <CheckCircle2 size={18} style={{ color: "var(--ok)", flexShrink: 0, marginTop: 1 }} />
               <div>
                 <div className="text-[14px] font-semibold" style={{ color: "var(--ok)" }}>
-                  Nothing similar.
+                  {t("new.nothingSimilar")}
                 </div>
                 <div className="text-[12.5px]" style={{ color: "var(--fg-muted)" }}>
-                  You're good to publish.
+                  {t("new.goodToPublish")}
                 </div>
               </div>
             </div>
@@ -174,13 +177,14 @@ export function SkillsNewPage() {
 
           {report?.candidates.map((c) => {
             const tone = c.confidence === "high" ? "bad" : c.confidence === "medium" ? "warn" : "default";
+            const confKey: TKey = c.confidence === "high" ? "conf.high" : c.confidence === "medium" ? "conf.medium" : "conf.low";
             return (
               <div key={c.hit.skill_id} className="py-4" style={{ borderBottom: "1px solid var(--border)" }} data-testid="dup-candidate">
                 <div className="flex items-baseline justify-between mb-1 gap-2">
                   <span className="text-[12px] font-mono truncate" style={{ color: "var(--fg-muted)" }}>
                     {c.hit.namespace_slug}/{c.hit.slug}
                   </span>
-                  <Badge tone={tone}>{c.confidence}</Badge>
+                  <Badge tone={tone}>{t(confKey)}</Badge>
                 </div>
                 <div className="text-[15px] font-semibold tracking-tight mb-2">{c.hit.display_name}</div>
                 {c.hit.description && (
@@ -199,7 +203,7 @@ export function SkillsNewPage() {
                 </div>
                 {c.suggested_action === "use_existing" && (
                   <div className="mt-2">
-                    <Tag>use the existing one</Tag>
+                    <Tag>{t("new.useExisting")}</Tag>
                   </div>
                 )}
               </div>

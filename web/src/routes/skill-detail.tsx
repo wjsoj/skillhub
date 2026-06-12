@@ -31,22 +31,30 @@ import {
   type IterationJob,
   type Skill,
 } from "@/lib/api";
+import { useT, useI18n, type Locale } from "@/i18n";
+import type { TKey } from "@/i18n/dict";
 
-const PROPOSAL_NODES = [
-  { key: "open", label: "Open" },
-  { key: "changes_requested", label: "Changes" },
-  { key: "approved", label: "Approved" },
-  { key: "merged", label: "Merged" },
+type TFn = ReturnType<typeof useT>;
+
+const PROPOSAL_NODES: { key: string; labelKey: TKey }[] = [
+  { key: "open", labelKey: "detail.prop.node.open" },
+  { key: "changes_requested", labelKey: "detail.prop.node.changes" },
+  { key: "approved", labelKey: "detail.prop.node.approved" },
+  { key: "merged", labelKey: "detail.prop.node.merged" },
 ];
 
-const ITER_NODES = [
-  { key: "queued", label: "Queued" },
-  { key: "running", label: "Running" },
-  { key: "succeeded", label: "Succeeded" },
-  { key: "submitted", label: "Submitted" },
+const ITER_NODES: { key: string; labelKey: TKey }[] = [
+  { key: "queued", labelKey: "detail.iter.node.queued" },
+  { key: "running", labelKey: "detail.iter.node.running" },
+  { key: "succeeded", labelKey: "detail.iter.node.succeeded" },
+  { key: "submitted", labelKey: "detail.iter.node.submitted" },
 ];
+
+const trNodes = (nodes: { key: string; labelKey: TKey }[], t: TFn) =>
+  nodes.map((n) => ({ key: n.key, label: t(n.labelKey) }));
 
 export function SkillDetailPage() {
+  const t = useT();
   const { id } = useParams({ from: "/skills/$id" });
   const q = useQuery({ queryKey: ["skill", id], queryFn: () => getSkill(id) });
 
@@ -54,7 +62,7 @@ export function SkillDetailPage() {
     <>
       <div className="mb-4">
         <Link to="/skills">
-          <Button variant="ghost" size="sm"><ArrowLeft size={14} /> Back to skills</Button>
+          <Button variant="ghost" size="sm"><ArrowLeft size={14} /> {t("detail.back")}</Button>
         </Link>
       </div>
 
@@ -77,7 +85,9 @@ export function SkillDetailPage() {
 }
 
 function SkillBody({ skill }: { skill: Skill }) {
+  const t = useT();
   const m = skill.manifest ?? {};
+  const visKey: TKey = skill.visibility === "global" ? "skills.filter.global" : skill.visibility === "team" ? "skills.filter.team" : "skills.filter.private";
   return (
     <>
       <PageHeader
@@ -98,10 +108,10 @@ function SkillBody({ skill }: { skill: Skill }) {
         actions={
           <div className="flex items-center gap-2 flex-wrap">
             <Badge tone={skill.visibility === "global" ? "info" : skill.visibility === "team" ? "default" : "warn"}>
-              {skill.visibility}
+              {t(visKey)}
             </Badge>
             {m.deprecated && (
-              <Badge tone="bad"><AlertTriangle size={11} /> deprecated</Badge>
+              <Badge tone="bad"><AlertTriangle size={11} /> {t("detail.deprecated")}</Badge>
             )}
           </div>
         }
@@ -109,10 +119,10 @@ function SkillBody({ skill }: { skill: Skill }) {
 
       <Tabs.Root defaultValue="overview" className="space-y-6">
         <Tabs.List className="tabs-list">
-          <Tabs.Trigger value="overview" className="tab">Overview</Tabs.Trigger>
-          <Tabs.Trigger value="proposals" className="tab">Proposals</Tabs.Trigger>
-          <Tabs.Trigger value="collaborators" className="tab">Collaborators</Tabs.Trigger>
-          <Tabs.Trigger value="iterations" className="tab">Iterations</Tabs.Trigger>
+          <Tabs.Trigger value="overview" className="tab">{t("detail.tab.overview")}</Tabs.Trigger>
+          <Tabs.Trigger value="proposals" className="tab">{t("detail.tab.proposals")}</Tabs.Trigger>
+          <Tabs.Trigger value="collaborators" className="tab">{t("detail.tab.collaborators")}</Tabs.Trigger>
+          <Tabs.Trigger value="iterations" className="tab">{t("detail.tab.iterations")}</Tabs.Trigger>
         </Tabs.List>
 
         <Tabs.Content value="overview">
@@ -135,6 +145,8 @@ function SkillBody({ skill }: { skill: Skill }) {
 /* ───────── Overview ───────── */
 
 function OverviewTab({ skill }: { skill: Skill }) {
+  const t = useT();
+  const { locale } = useI18n();
   const m = skill.manifest ?? {};
   const inputs = Array.isArray(m.inputs) ? m.inputs : [];
   const outputs = Array.isArray(m.outputs) ? m.outputs : [];
@@ -154,7 +166,7 @@ function OverviewTab({ skill }: { skill: Skill }) {
           <Card className="p-4 flex items-start gap-3" style={{ borderLeft: "3px solid var(--bad)" }}>
             <AlertTriangle size={16} style={{ color: "var(--bad)", flexShrink: 0, marginTop: 2 }} />
             <div>
-              <div className="text-[13.5px] font-semibold">Deprecated</div>
+              <div className="text-[13.5px] font-semibold">{t("detail.deprecatedTitle")}</div>
               <div className="text-[13px] mt-0.5" style={{ color: "var(--fg-muted)" }}>
                 {String(m.deprecation_note)}
               </div>
@@ -176,7 +188,7 @@ function OverviewTab({ skill }: { skill: Skill }) {
           <Card className="overflow-hidden">
             <div className="px-5 py-3 flex items-center gap-2" style={{ borderBottom: "1px solid var(--border)" }}>
               <FileText size={14} />
-              <span className="text-[13.5px] font-semibold">SKILL.md</span>
+              <span className="text-[13.5px] font-semibold">{t("detail.skillMd")}</span>
             </div>
             <div className="px-5 py-4">
               <Markdown content={skill.readme} />
@@ -189,11 +201,11 @@ function OverviewTab({ skill }: { skill: Skill }) {
           <Card className="overflow-hidden">
             <div className="px-5 py-3 flex items-center gap-2" style={{ borderBottom: "1px solid var(--border)" }}>
               <Package size={14} />
-              <span className="text-[13.5px] font-semibold">Contract</span>
+              <span className="text-[13.5px] font-semibold">{t("detail.contract")}</span>
             </div>
             <div className="grid md:grid-cols-2 gap-px" style={{ background: "var(--border)" }}>
-              <SignatureBlock title="Inputs" rows={inputs as ContractRow[]} />
-              <SignatureBlock title="Outputs" rows={outputs as ContractRow[]} />
+              <SignatureBlock title={t("detail.inputs")} rows={inputs as ContractRow[]} />
+              <SignatureBlock title={t("detail.outputs")} rows={outputs as ContractRow[]} />
             </div>
           </Card>
         )}
@@ -203,7 +215,7 @@ function OverviewTab({ skill }: { skill: Skill }) {
           <Card className="overflow-hidden">
             <div className="px-5 py-3 flex items-center gap-2" style={{ borderBottom: "1px solid var(--border)" }}>
               <FolderTree size={14} />
-              <span className="text-[13.5px] font-semibold">Files</span>
+              <span className="text-[13.5px] font-semibold">{t("detail.files")}</span>
               <span className="font-mono text-[11.5px] ml-1" style={{ color: "var(--fg-faint)" }}>
                 {files.length}
               </span>
@@ -228,7 +240,7 @@ function OverviewTab({ skill }: { skill: Skill }) {
         <Card className="overflow-hidden">
           <div className="px-5 py-3 flex items-center gap-2" style={{ borderBottom: "1px solid var(--border)" }}>
             <FileCode size={14} />
-            <span className="text-[13.5px] font-semibold">Raw manifest</span>
+            <span className="text-[13.5px] font-semibold">{t("detail.rawManifest")}</span>
           </div>
           <pre
             className="px-5 py-4 text-[12px] font-mono overflow-x-auto"
@@ -242,21 +254,21 @@ function OverviewTab({ skill }: { skill: Skill }) {
       {/* Sidebar */}
       <div className="space-y-4 lg:sticky lg:top-20 self-start">
         <Card className="p-5 space-y-4">
-          <Metric label="Installs" value={formatNum(skill.install_count)} icon={Download} />
-          <Metric label="Stars" value={formatNum(skill.stars)} icon={Star} />
-          <Metric label="First seen" value={formatDate(skill.created_at)} icon={Calendar} />
-          <Metric label="Updated" value={formatDate(skill.updated_at)} icon={Calendar} />
+          <Metric label={t("detail.metric.installs")} value={formatNum(skill.install_count)} icon={Download} />
+          <Metric label={t("detail.metric.stars")} value={formatNum(skill.stars)} icon={Star} />
+          <Metric label={t("detail.metric.firstSeen")} value={formatDate(skill.created_at, locale)} icon={Calendar} />
+          <Metric label={t("detail.metric.updated")} value={formatDate(skill.updated_at, locale)} icon={Calendar} />
         </Card>
 
         {(m.author || m.license || m.category || m.runtime || deps.length > 0) && (
           <Card className="p-5 space-y-3">
-            {m.author && <SideRow label="Author" value={<span className="font-mono">{String(m.author)}</span>} />}
-            {m.license && <SideRow label="License" value={<span className="font-mono">{String(m.license)}</span>} />}
-            {m.category && <SideRow label="Category" value={<Badge tone="accent">{String(m.category)}</Badge>} />}
-            {m.entrypoint && <SideRow label="Entrypoint" value={<code className="text-[12px] font-mono">{String(m.entrypoint)}</code>} />}
+            {m.author && <SideRow label={t("detail.side.author")} value={<span className="font-mono">{String(m.author)}</span>} />}
+            {m.license && <SideRow label={t("detail.side.license")} value={<span className="font-mono">{String(m.license)}</span>} />}
+            {m.category && <SideRow label={t("detail.side.category")} value={<Badge tone="accent">{String(m.category)}</Badge>} />}
+            {m.entrypoint && <SideRow label={t("detail.side.entrypoint")} value={<code className="text-[12px] font-mono">{String(m.entrypoint)}</code>} />}
             {m.runtime && Object.keys(m.runtime).length > 0 && (
               <SideRow
-                label="Runtime"
+                label={t("detail.side.runtime")}
                 value={
                   <div className="flex flex-wrap gap-1">
                     {Object.entries(m.runtime).map(([k, v]) => (
@@ -268,7 +280,7 @@ function OverviewTab({ skill }: { skill: Skill }) {
             )}
             {deps.length > 0 && (
               <SideRow
-                label="Dependencies"
+                label={t("detail.side.dependencies")}
                 value={
                   <ul className="space-y-0.5">
                     {(deps as string[]).map((d) => (
@@ -286,7 +298,7 @@ function OverviewTab({ skill }: { skill: Skill }) {
         {skill.repository_url && (
           <Card className="p-5">
             <div className="text-[11.5px] font-medium uppercase tracking-wider mb-2" style={{ color: "var(--fg-subtle)" }}>
-              Repository
+              {t("detail.side.repository")}
             </div>
             <a
               href={skill.repository_url}
@@ -307,6 +319,7 @@ function OverviewTab({ skill }: { skill: Skill }) {
 }
 
 function InstallCard({ cmd }: { cmd: string }) {
+  const t = useT();
   const [copied, setCopied] = useState(false);
   const copy = () => {
     navigator.clipboard.writeText(cmd).then(() => {
@@ -318,7 +331,7 @@ function InstallCard({ cmd }: { cmd: string }) {
     <Card className="overflow-hidden">
       <div className="px-5 py-3 flex items-center gap-2" style={{ borderBottom: "1px solid var(--border)" }}>
         <Download size={14} />
-        <span className="text-[13.5px] font-semibold">Installation</span>
+        <span className="text-[13.5px] font-semibold">{t("detail.installation")}</span>
       </div>
       <div className="px-5 py-3 flex items-center gap-3" style={{ background: "var(--bg-muted)" }}>
         <span className="font-mono text-[13px] flex-1 truncate" style={{ color: "var(--fg-muted)" }}>
@@ -328,9 +341,9 @@ function InstallCard({ cmd }: { cmd: string }) {
         <button
           onClick={copy}
           className="btn btn-secondary btn-sm cursor-pointer"
-          aria-label="Copy install command"
+          aria-label={t("detail.copy")}
         >
-          {copied ? <><Check size={13} /> Copied</> : <><Copy size={13} /> Copy</>}
+          {copied ? <><Check size={13} /> {t("detail.copied")}</> : <><Copy size={13} /> {t("detail.copy")}</>}
         </button>
       </div>
     </Card>
@@ -346,13 +359,14 @@ interface ContractRow {
 }
 
 function SignatureBlock({ title, rows }: { title: string; rows: ContractRow[] }) {
+  const t = useT();
   return (
     <div className="p-5" style={{ background: "var(--surface)" }}>
       <div className="text-[11.5px] font-medium uppercase tracking-wider mb-3" style={{ color: "var(--fg-subtle)" }}>
         {title}
       </div>
       {rows.length === 0 ? (
-        <div className="text-[12.5px]" style={{ color: "var(--fg-faint)" }}>None.</div>
+        <div className="text-[12.5px]" style={{ color: "var(--fg-faint)" }}>{t("common.none")}</div>
       ) : (
         <ul className="space-y-3">
           {rows.map((r) => (
@@ -360,7 +374,7 @@ function SignatureBlock({ title, rows }: { title: string; rows: ContractRow[] })
               <div className="flex items-baseline gap-2 mb-0.5">
                 <code className="font-mono font-semibold">{r.name}</code>
                 <span className="font-mono" style={{ color: "var(--fg-muted)" }}>{r.type}</span>
-                {r.required && <Badge tone="warn" className="text-[10px]">required</Badge>}
+                {r.required && <Badge tone="warn" className="text-[10px]">{t("detail.required")}</Badge>}
                 {r.default !== undefined && r.default !== null && (
                   <span className="font-mono" style={{ color: "var(--fg-faint)" }}>
                     = {JSON.stringify(r.default)}
@@ -512,9 +526,10 @@ function formatNum(n: number): string {
   return n.toLocaleString();
 }
 
-function formatDate(iso: string): string {
+function formatDate(iso: string, locale: Locale): string {
   try {
-    return new Date(iso).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+    const tag = locale === "zh" ? "zh-CN" : "en-US";
+    return new Date(iso).toLocaleDateString(tag, { month: "short", day: "numeric", year: "numeric" });
   } catch { return iso; }
 }
 
@@ -524,6 +539,7 @@ function shortRepo(url: string): string {
 
 /* ───────── Proposals ───────── */
 function ProposalsTab({ skillId }: { skillId: string }) {
+  const t = useT();
   const qc = useQueryClient();
   const q = useQuery({ queryKey: ["proposals", skillId], queryFn: () => listProposals(skillId) });
 
@@ -546,31 +562,31 @@ function ProposalsTab({ skillId }: { skillId: string }) {
   return (
     <div className="space-y-6">
       <Card className="p-5">
-        <div className="text-[14.5px] font-semibold mb-1">Proposal pipeline</div>
+        <div className="text-[14.5px] font-semibold mb-1">{t("detail.prop.pipeline")}</div>
         <p className="text-[12.5px] mb-4" style={{ color: "var(--fg-muted)" }}>
-          Drafts → Proposals → Review → Merge. Merging materialises a new <span className="font-mono">SkillVersion</span>.
+          {t("detail.prop.pipelineDescPre")} <span className="font-mono">SkillVersion</span>.
         </p>
         <div className="rounded-md p-4" style={{ background: "var(--bg-muted)" }}>
-          <Stepper nodes={PROPOSAL_NODES} doneKeys={["open"]} activeKey="open" />
+          <Stepper nodes={trNodes(PROPOSAL_NODES, t)} doneKeys={["open"]} activeKey="open" />
         </div>
       </Card>
 
       <div className="space-y-3" data-testid="proposal-list">
         {q.data?.length === 0 && (
           <Card className="p-6 text-center" style={{ color: "var(--fg-muted)" }}>
-            No open proposals.
+            {t("detail.prop.none")}
           </Card>
         )}
         {q.data?.map((p) => <ProposalRow key={p.id} p={p} skillId={skillId} />)}
       </div>
 
       <Card className="p-5">
-        <div className="text-[14.5px] font-semibold mb-3">Open a new proposal</div>
+        <div className="text-[14.5px] font-semibold mb-3">{t("detail.prop.openNew")}</div>
         <form className="grid grid-cols-1 md:grid-cols-[2fr_1fr] gap-3" onSubmit={(e) => { e.preventDefault(); open.mutate(); }}>
           <div className="space-y-3">
             <input
               className="input"
-              placeholder="e.g. 'Add OCR fallback to PDF parser'"
+              placeholder={t("detail.prop.ph.title")}
               value={title}
               onChange={(e) => setTitle(e.target.value)}
               data-testid="proposal-title"
@@ -578,17 +594,17 @@ function ProposalsTab({ skillId }: { skillId: string }) {
             <textarea
               className="textarea"
               rows={3}
-              placeholder="What changed, why, and any test notes."
+              placeholder={t("detail.prop.ph.summary")}
               value={summary}
               onChange={(e) => setSummary(e.target.value)}
               data-testid="proposal-summary"
             />
           </div>
           <div className="flex flex-col gap-2">
-            <label className="text-[12.5px] font-medium">Target version</label>
+            <label className="text-[12.5px] font-medium">{t("detail.prop.targetVersion")}</label>
             <input className="input input-mono" value={target} onChange={(e) => setTarget(e.target.value)} />
             <Button className="mt-auto" disabled={!title || open.isPending} data-testid="proposal-submit">
-              {open.isPending ? <><Loader2 size={14} className="animate-spin" /> Opening…</> : <><Plus size={14} /> Open proposal</>}
+              {open.isPending ? <><Loader2 size={14} className="animate-spin" /> {t("detail.prop.opening")}</> : <><Plus size={14} /> {t("detail.prop.openProposal")}</>}
             </Button>
           </div>
         </form>
@@ -597,7 +613,17 @@ function ProposalsTab({ skillId }: { skillId: string }) {
   );
 }
 
+const PROPOSAL_STATE_LABEL: Record<Proposal["state"], TKey> = {
+  open: "detail.prop.node.open",
+  changes_requested: "detail.prop.node.changes",
+  approved: "detail.prop.node.approved",
+  rejected: "detail.prop.node.rejected",
+  merged: "detail.prop.node.merged",
+  withdrawn: "detail.prop.node.withdrawn",
+};
+
 function ProposalRow({ p, skillId }: { p: Proposal; skillId: string }) {
+  const t = useT();
   const qc = useQueryClient();
   const decide = useMutation({
     mutationFn: (state: Proposal["state"]) => decideProposal(skillId, p.id, state),
@@ -626,7 +652,7 @@ function ProposalRow({ p, skillId }: { p: Proposal; skillId: string }) {
                 : "default"
               }
             >
-              {p.state.replace("_", " ")}
+              {t(PROPOSAL_STATE_LABEL[p.state])}
             </Badge>
             <span className="font-mono text-[11.5px]" style={{ color: "var(--fg-faint)" }}>
               #{p.id.slice(0, 8)}
@@ -637,18 +663,18 @@ function ProposalRow({ p, skillId }: { p: Proposal; skillId: string }) {
             <p className="mt-1 text-[13px]" style={{ color: "var(--fg-muted)" }}>{p.body}</p>
           )}
           <div className="mt-4">
-            <Stepper nodes={PROPOSAL_NODES} doneKeys={done} activeKey={p.state} />
+            <Stepper nodes={trNodes(PROPOSAL_NODES, t)} doneKeys={done} activeKey={p.state} />
           </div>
         </div>
         <div className="flex flex-row md:flex-col gap-2 w-full md:w-auto md:min-w-[140px]">
           <Button variant="secondary" size="sm" onClick={() => comment.mutate()} disabled={comment.isPending} data-testid="proposal-comment">
-            <MessageSquare size={13} /> Comment
+            <MessageSquare size={13} /> {t("detail.prop.comment")}
           </Button>
           <Button variant="secondary" size="sm" onClick={() => decide.mutate("approved")} disabled={p.state !== "open" && p.state !== "changes_requested"} data-testid="proposal-approve">
-            <ThumbsUp size={13} /> Approve
+            <ThumbsUp size={13} /> {t("detail.prop.approve")}
           </Button>
           <Button size="sm" onClick={() => decide.mutate("merged")} disabled={p.state !== "approved"} data-testid="proposal-merge">
-            <GitMerge size={13} /> Merge
+            <GitMerge size={13} /> {t("detail.prop.merge")}
           </Button>
         </div>
       </div>
@@ -658,6 +684,7 @@ function ProposalRow({ p, skillId }: { p: Proposal; skillId: string }) {
 
 /* ───────── Collaborators ───────── */
 function CollaboratorsTab({ skillId }: { skillId: string }) {
+  const t = useT();
   const qc = useQueryClient();
   const q = useQuery({ queryKey: ["collaborators", skillId], queryFn: () => listCollaborators(skillId) });
 
@@ -673,20 +700,20 @@ function CollaboratorsTab({ skillId }: { skillId: string }) {
     <div className="space-y-6">
       <Card className="overflow-hidden">
         <div className="px-5 py-4" style={{ borderBottom: "1px solid var(--border)" }}>
-          <div className="text-[14.5px] font-semibold">Collaborators</div>
+          <div className="text-[14.5px] font-semibold">{t("detail.collab.title")}</div>
           <p className="mt-0.5 text-[12.5px]" style={{ color: "var(--fg-muted)" }}>
-            Roles are per skill, independent of namespace membership. Reader → Writer → Maintainer.
+            {t("detail.collab.desc")}
           </p>
         </div>
         <div className="overflow-x-auto">
           <table className="table">
             <thead>
-              <tr><th>User</th><th>Role</th><th>Added</th></tr>
+              <tr><th>{t("detail.collab.colUser")}</th><th>{t("detail.collab.colRole")}</th><th>{t("detail.collab.colAdded")}</th></tr>
             </thead>
             <tbody data-testid="collab-tbody">
               {q.data?.length === 0 && (
                 <tr><td colSpan={3} className="text-center py-10" style={{ color: "var(--fg-muted)" }}>
-                  No collaborators yet — the skill is editable by namespace owners only.
+                  {t("detail.collab.none")}
                 </td></tr>
               )}
               {q.data?.map((c) => (
@@ -708,13 +735,13 @@ function CollaboratorsTab({ skillId }: { skillId: string }) {
       </Card>
 
       <Card className="p-5">
-        <div className="text-[14.5px] font-semibold mb-3">Add a collaborator</div>
+        <div className="text-[14.5px] font-semibold mb-3">{t("detail.collab.add")}</div>
         <form
           className="grid grid-cols-1 md:grid-cols-[2fr_1fr_auto] gap-3 items-end"
           onSubmit={(e) => { e.preventDefault(); if (userId) add.mutate(); }}
         >
           <label>
-            <div className="text-[12.5px] font-medium mb-1.5">User ID</div>
+            <div className="text-[12.5px] font-medium mb-1.5">{t("detail.collab.userId")}</div>
             <input
               className="input input-mono"
               value={userId}
@@ -724,15 +751,15 @@ function CollaboratorsTab({ skillId }: { skillId: string }) {
             />
           </label>
           <label>
-            <div className="text-[12.5px] font-medium mb-1.5">Role</div>
+            <div className="text-[12.5px] font-medium mb-1.5">{t("detail.collab.role")}</div>
             <select className="select" value={role} onChange={(e) => setRole(e.target.value as typeof role)} data-testid="collab-role">
-              <option value="reader">Reader</option>
-              <option value="writer">Writer</option>
-              <option value="maintainer">Maintainer</option>
+              <option value="reader">{t("detail.collab.role.reader")}</option>
+              <option value="writer">{t("detail.collab.role.writer")}</option>
+              <option value="maintainer">{t("detail.collab.role.maintainer")}</option>
             </select>
           </label>
           <Button disabled={!userId || add.isPending} data-testid="collab-add">
-            <Plus size={14} /> Add
+            <Plus size={14} /> {t("common.add")}
           </Button>
         </form>
       </Card>
@@ -742,6 +769,7 @@ function CollaboratorsTab({ skillId }: { skillId: string }) {
 
 /* ───────── Iterations ───────── */
 function IterationsTab({ skillId }: { skillId: string }) {
+  const t = useT();
   const qc = useQueryClient();
   const q = useQuery({ queryKey: ["iterations", skillId], queryFn: () => listIterations(skillId) });
 
@@ -756,30 +784,30 @@ function IterationsTab({ skillId }: { skillId: string }) {
   return (
     <div className="space-y-6">
       <Card className="p-5">
-        <div className="text-[14.5px] font-semibold mb-1">Open an iteration</div>
+        <div className="text-[14.5px] font-semibold mb-1">{t("detail.iter.open")}</div>
         <p className="text-[12.5px] mb-4" style={{ color: "var(--fg-muted)" }}>
-          A sandboxed editing session for AI agents (or writers). The submit step routes the result into the proposal pipeline.
+          {t("detail.iter.desc")}
         </p>
         <form
           className="grid grid-cols-1 md:grid-cols-[1fr_2fr_auto] gap-3 items-end"
           onSubmit={(e) => { e.preventDefault(); if (intent) open.mutate(); }}
         >
           <label>
-            <div className="text-[12.5px] font-medium mb-1.5">Agent</div>
+            <div className="text-[12.5px] font-medium mb-1.5">{t("detail.iter.agent")}</div>
             <input className="input input-mono" value={agent} onChange={(e) => setAgent(e.target.value)} data-testid="iter-agent" />
           </label>
           <label>
-            <div className="text-[12.5px] font-medium mb-1.5">Intent</div>
+            <div className="text-[12.5px] font-medium mb-1.5">{t("detail.iter.intent")}</div>
             <input
               className="input"
               value={intent}
               onChange={(e) => setIntent(e.target.value)}
-              placeholder="Add OCR fallback when PDF yields fewer than 80 chars."
+              placeholder={t("detail.iter.ph.intent")}
               data-testid="iter-intent"
             />
           </label>
           <Button disabled={!intent || open.isPending} data-testid="iter-open">
-            {open.isPending ? <><Loader2 size={14} className="animate-spin" /> Opening…</> : <><Play size={14} /> Open job</>}
+            {open.isPending ? <><Loader2 size={14} className="animate-spin" /> {t("detail.iter.opening")}</> : <><Play size={14} /> {t("detail.iter.openJob")}</>}
           </Button>
         </form>
       </Card>
@@ -787,7 +815,7 @@ function IterationsTab({ skillId }: { skillId: string }) {
       <div className="space-y-3" data-testid="iter-list">
         {q.data?.length === 0 && (
           <Card className="p-6 text-center" style={{ color: "var(--fg-muted)" }}>
-            No iterations yet.
+            {t("detail.iter.none")}
           </Card>
         )}
         {q.data?.map((j) => <IterationCard key={j.id} job={j} skillId={skillId} />)}
@@ -796,13 +824,23 @@ function IterationsTab({ skillId }: { skillId: string }) {
   );
 }
 
+const ITER_STATE_LABEL: Record<IterationJob["state"], TKey> = {
+  queued: "detail.iter.node.queued",
+  running: "detail.iter.node.running",
+  succeeded: "detail.iter.node.succeeded",
+  submitted: "detail.iter.node.submitted",
+  failed: "detail.iter.node.failed",
+  cancelled: "detail.iter.node.cancelled",
+};
+
 function IterationCard({ job, skillId }: { job: IterationJob; skillId: string }) {
+  const t = useT();
   const qc = useQueryClient();
   const [cmd, setCmd] = useState("echo run");
   const [lastRun, setLastRun] = useState<null | {
     exit_code: number; duration_ms: number; timed_out: boolean; stdout: string; stderr: string;
   }>(null);
-  const [submitTitle, setSubmitTitle] = useState(`AI iteration: ${job.intent.slice(0, 60)}`);
+  const [submitTitle, setSubmitTitle] = useState(t("detail.iter.submitTitleDefault", { intent: job.intent.slice(0, 60) }));
 
   const runTests = useMutation({
     mutationFn: () => runIterationTests(skillId, job.id, cmd),
@@ -829,7 +867,7 @@ function IterationCard({ job, skillId }: { job: IterationJob; skillId: string })
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2 mb-1">
             <Badge tone={job.state === "submitted" ? "ok" : job.state === "failed" ? "bad" : job.state === "running" ? "accent" : "default"}>
-              {job.state}
+              {t(ITER_STATE_LABEL[job.state])}
             </Badge>
             <Tag>{job.agent}</Tag>
             <span className="font-mono text-[11.5px]" style={{ color: "var(--fg-faint)" }}>
@@ -839,38 +877,38 @@ function IterationCard({ job, skillId }: { job: IterationJob; skillId: string })
           <div className="text-[14.5px] font-semibold">{job.intent}</div>
         </div>
         {job.submitted_proposal && (
-          <Badge tone="accent">→ proposal #{job.submitted_proposal.slice(0, 8)}</Badge>
+          <Badge tone="accent">{t("detail.iter.toProposal", { id: job.submitted_proposal.slice(0, 8) })}</Badge>
         )}
       </div>
 
       <div className="rounded-md p-4 mb-4" style={{ background: "var(--bg-muted)" }}>
-        <Stepper nodes={ITER_NODES} doneKeys={done} activeKey={job.state} />
+        <Stepper nodes={trNodes(ITER_NODES, t)} doneKeys={done} activeKey={job.state} />
       </div>
 
       {(job.state === "running" || job.state === "succeeded") && (
         <>
           <div className="grid grid-cols-1 md:grid-cols-[2fr_3fr] gap-3 mb-4">
             <div>
-              <div className="text-[12.5px] font-medium mb-1.5">Run a command</div>
+              <div className="text-[12.5px] font-medium mb-1.5">{t("detail.iter.runCmd")}</div>
               <input className="input input-mono mb-2" value={cmd} onChange={(e) => setCmd(e.target.value)} data-testid="iter-cmd" />
               <Button size="sm" onClick={() => runTests.mutate()} disabled={runTests.isPending} data-testid="iter-run">
-                {runTests.isPending ? <><Loader2 size={13} className="animate-spin" /> Running…</> : <><Play size={13} /> Run</>}
+                {runTests.isPending ? <><Loader2 size={13} className="animate-spin" /> {t("detail.iter.running")}</> : <><Play size={13} /> {t("detail.iter.run")}</>}
               </Button>
             </div>
             <div>
-              <div className="text-[12.5px] font-medium mb-1.5">Last run</div>
+              <div className="text-[12.5px] font-medium mb-1.5">{t("detail.iter.lastRun")}</div>
               {!lastRun ? (
                 <Card className="p-4 text-[12.5px]" style={{ color: "var(--fg-muted)" }}>
-                  No runs yet.
+                  {t("detail.iter.noRuns")}
                 </Card>
               ) : (
                 <Card className="p-4 space-y-2 text-[12px]">
                   <div className="flex items-center gap-2">
                     <Badge tone={lastRun.exit_code === 0 ? "ok" : "bad"}>
-                      exit {lastRun.exit_code}
+                      {t("detail.iter.exit", { code: lastRun.exit_code })}
                     </Badge>
                     <span className="font-mono text-[11.5px]" style={{ color: "var(--fg-muted)" }}>
-                      {lastRun.duration_ms}ms{lastRun.timed_out ? " · timeout" : ""}
+                      {lastRun.duration_ms}ms{lastRun.timed_out ? t("detail.iter.timeout") : ""}
                     </span>
                   </div>
                   {lastRun.stdout && (
@@ -895,7 +933,7 @@ function IterationCard({ job, skillId }: { job: IterationJob; skillId: string })
               onChange={(e) => setSubmitTitle(e.target.value)}
             />
             <Button onClick={() => submit.mutate()} disabled={submit.isPending} data-testid="iter-submit">
-              {submit.isPending ? <><Loader2 size={14} className="animate-spin" /> Submitting…</> : <><Send size={14} /> Submit as proposal</>}
+              {submit.isPending ? <><Loader2 size={14} className="animate-spin" /> {t("detail.iter.submitting")}</> : <><Send size={14} /> {t("detail.iter.submitAsProposal")}</>}
             </Button>
           </div>
         </>
