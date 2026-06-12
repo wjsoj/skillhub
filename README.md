@@ -147,6 +147,24 @@ Then:
 - Health: `GET /healthz`
 - REST: `GET /api/v1/...`
 - Agent guide: `GET /agents.md`
+- ClawHub registry: `GET /clawhub/...`
+
+### Install skills with the real `clawhub` CLI
+
+This registry implements the [`clawhub`](https://www.npmjs.com/package/clawhub)
+CLI's registry protocol under the `/clawhub` prefix, so the upstream CLI can
+search and install straight from it:
+
+```bash
+clawhub --registry http://localhost:8080/clawhub search csv
+clawhub --registry http://localhost:8080/clawhub install csv-clean
+# → SKILL.md + manifest.json written to ./skills/csv-clean/
+```
+
+Reads are anonymous and see only `global` skills; pass one of this registry's
+JWTs as the clawhub token to install team/private skills you have access to.
+Since skills are text, "download" zips the `SKILL.md` + manifest from
+Postgres — no object store.
 
 > [!NOTE]
 > Without `SKILLHUB__EMBEDDER__URL` set, the server falls back to a

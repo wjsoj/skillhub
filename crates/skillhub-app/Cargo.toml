@@ -43,6 +43,7 @@ semver.workspace = true
 url.workspace = true
 async-trait.workspace = true
 bytes.workspace = true
+zip.workspace = true
 futures.workspace = true
 
 metrics.workspace = true

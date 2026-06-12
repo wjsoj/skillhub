@@ -27,6 +27,7 @@ mod iterations;
 mod proposals;
 mod meta;
 mod authz;
+mod clawhub;
 
 pub fn router(state: Arc<AppState>) -> Router {
     let skills_routes = skills::routes()
@@ -62,6 +63,7 @@ pub fn router(state: Arc<AppState>) -> Router {
         .merge(meta::root_routes())
         .nest("/api/v1", v1)
         .nest("/cli", compat::routes())
+        .nest("/clawhub", clawhub::routes())
         .layer(TraceLayer::new_for_http())
         .layer(CorsLayer::permissive())
         .with_state(state)

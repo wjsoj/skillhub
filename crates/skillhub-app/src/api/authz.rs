@@ -7,10 +7,7 @@
 //!   * `require_*` — write-path guards that reject callers without an
 //!     owning/maintaining role on the target namespace or skill.
 
-use std::sync::Arc;
-
 use skillhub_auth::{Principal, Role};
-use sqlx::Row;
 use uuid::Uuid;
 
 use crate::error::ApiError;
