@@ -24,7 +24,17 @@ pub fn vis_predicate(p_super: usize, p_uid: usize) -> String {
          OR (s.visibility = 'team' AND EXISTS \
              (SELECT 1 FROM namespace_members m WHERE m.namespace_id = s.namespace_id AND m.user_id = ${p_uid})) \
          OR (s.visibility = 'private' AND EXISTS \
-             (SELECT 1 FROM skill_collaborators c WHERE c.skill_id = s.id AND c.user_id = ${p_uid})))"
+             (SELECT 1 FROM skill_collaborators c WHERE c.skill_id = s.id AND c.user_id = ${p_uid})) \
+         OR EXISTS ( \
+             SELECT 1 FROM cross_scope_grants g \
+             WHERE (g.expires_at IS NULL OR g.expires_at > now()) \
+               AND (g.grantee_user_id = ${p_uid} \
+                    OR g.grantee_department_id IN \
+                       (SELECT department_id FROM department_memberships WHERE user_id = ${p_uid})) \
+               AND (g.target_skill_id = s.id \
+                    OR g.target_namespace_id = s.namespace_id \
+                    OR g.target_department_id = \
+                       (SELECT department_id FROM namespaces WHERE id = s.namespace_id))))"
     )
 }
 
