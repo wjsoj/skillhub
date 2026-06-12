@@ -166,10 +166,9 @@ function OverviewTab({ skill }: { skill: Skill }) {
     <div className="grid grid-cols-1 lg:grid-cols-[1fr_320px] gap-6 items-start">
       {/* Main column */}
       <div className="space-y-6 min-w-0">
-        {/* Install command */}
-        {skill.install_command && (
-          <InstallCard cmd={skill.install_command} />
-        )}
+        {/* Install command — built from the current origin so it works against
+            whatever host is serving this page (clawhub-compatible registry). */}
+        <InstallCard slug={skill.slug} />
 
         {m.deprecated && m.deprecation_note && (
           <Card className="p-4 flex items-start gap-3" style={{ borderLeft: "3px solid var(--bad)" }}>
@@ -328,9 +327,13 @@ function OverviewTab({ skill }: { skill: Skill }) {
   );
 }
 
-function InstallCard({ cmd }: { cmd: string }) {
+function InstallCard({ slug }: { slug: string }) {
   const t = useT();
   const [copied, setCopied] = useState(false);
+  // Build the install command against whatever host is serving this page, so
+  // it's correct on localhost, a staging box, or production without hardcoding.
+  const registry = `${typeof window !== "undefined" ? window.location.origin : ""}/clawhub`;
+  const cmd = `clawhub --registry ${registry} install ${slug}`;
   const copy = () => {
     navigator.clipboard.writeText(cmd).then(() => {
       setCopied(true);

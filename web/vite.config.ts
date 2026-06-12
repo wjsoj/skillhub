@@ -12,6 +12,9 @@ export default defineConfig({
     port: 5173,
     proxy: {
       "/api": { target: "http://127.0.0.1:8088", changeOrigin: true },
+      // Proxy the clawhub-compat surface too, so the install command shown in
+      // the UI (built from window.location.origin) also works in dev.
+      "/clawhub": { target: "http://127.0.0.1:8088", changeOrigin: true },
     },
   },
   build: {
