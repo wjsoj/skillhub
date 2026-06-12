@@ -23,3 +23,7 @@ cli/dist
 
 # TS incremental build cache
 web/*.tsbuildinfo
+
+# clawhub CLI install artifacts
+.clawhub/
+skills/
