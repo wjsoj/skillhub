@@ -15,8 +15,11 @@ use serde::Serialize;
 use sqlx::Row;
 use uuid::Uuid;
 
+use crate::api::authz;
 use crate::error::ApiError;
+use crate::middleware::AuthPrincipal;
 use crate::state::AppState;
+use skillhub_auth::Principal;
 use skillhub_domain::DomainError;
 
 pub fn routes() -> Router<Arc<AppState>> {
@@ -41,20 +44,28 @@ struct ResolveResult {
 
 async fn lookup(
     state: &AppState,
+    principal: &Principal,
     namespace: &str,
     slug: &str,
 ) -> Result<ResolveResult, ApiError> {
-    let row = sqlx::query(
+    let uid = principal.user_id.ok_or(DomainError::Unauthorized)?;
+    // Visibility filter folded into the lookup — a skill the caller can't see
+    // returns the same NotFound as one that doesn't exist (no existence leak).
+    let sql = format!(
         r#"SELECT s.id, s.display_name, s.manifest, s.install_command, s.install_count
            FROM skills s JOIN namespaces n ON n.id = s.namespace_id
-           WHERE n.slug = $1 AND s.slug = $2"#,
-    )
-    .bind(namespace)
-    .bind(slug)
-    .fetch_optional(&state.pool)
-    .await
-    .map_err(|e| DomainError::Internal(e.to_string()))?
-    .ok_or_else(|| DomainError::NotFound(format!("{namespace}/{slug}")))?;
+           WHERE n.slug = $1 AND s.slug = $2 AND {}"#,
+        authz::vis_predicate(3, 4)
+    );
+    let row = sqlx::query(&sql)
+        .bind(namespace)
+        .bind(slug)
+        .bind(authz::is_super(principal))
+        .bind(uid)
+        .fetch_optional(&state.pool)
+        .await
+        .map_err(|e| DomainError::Internal(e.to_string()))?
+        .ok_or_else(|| DomainError::NotFound(format!("{namespace}/{slug}")))?;
 
     let skill_id: Uuid = row.get("id");
 
@@ -86,16 +97,18 @@ async fn lookup(
 
 async fn resolve(
     State(state): State<Arc<AppState>>,
+    AuthPrincipal(principal): AuthPrincipal,
     Path((namespace, slug)): Path<(String, String)>,
 ) -> Result<Json<ResolveResult>, ApiError> {
-    Ok(Json(lookup(&state, &namespace, &slug).await?))
+    Ok(Json(lookup(&state, &principal, &namespace, &slug).await?))
 }
 
 async fn install(
     State(state): State<Arc<AppState>>,
+    AuthPrincipal(principal): AuthPrincipal,
     Path((namespace, slug)): Path<(String, String)>,
 ) -> Result<Json<ResolveResult>, ApiError> {
-    let mut result = lookup(&state, &namespace, &slug).await?;
+    let mut result = lookup(&state, &principal, &namespace, &slug).await?;
     // Count the install.
     let n: i64 = sqlx::query_scalar(
         "UPDATE skills SET install_count = install_count + 1, downloads = downloads + 1

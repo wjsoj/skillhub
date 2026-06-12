@@ -16,7 +16,9 @@ use serde::{Deserialize, Serialize};
 use sqlx::Row;
 use uuid::Uuid;
 
+use crate::api::authz;
 use crate::error::ApiError;
+use crate::middleware::AuthPrincipal;
 use crate::state::AppState;
 use skillhub_domain::DomainError;
 
@@ -88,25 +90,32 @@ const COLS: &str = r#"
 
 async fn search(
     State(state): State<Arc<AppState>>,
+    AuthPrincipal(principal): AuthPrincipal,
     Query(params): Query<SearchParams>,
 ) -> Result<Json<Vec<SearchHit>>, ApiError> {
+    let uid = principal.user_id.ok_or(DomainError::Unauthorized)?;
+    let is_super = authz::is_super(&principal);
     let limit = params.limit.unwrap_or(50).clamp(1, 200);
     let q = params.q.unwrap_or_default();
     let q = q.trim();
     let ns = params.namespace.as_deref().map(|s| s.trim()).filter(|s| !s.is_empty());
 
-    // No query → plain listing (optionally namespace-filtered).
+    // No query → plain listing (visibility-filtered, optionally namespace-filtered).
     if q.is_empty() {
         let sql = format!(
             r#"SELECT {COLS}
                FROM skills s JOIN namespaces n ON n.id = s.namespace_id
                WHERE ($1::text IS NULL OR n.slug = $1)
+                 AND {vis}
                ORDER BY s.install_count DESC, s.display_name ASC
-               LIMIT $2"#
+               LIMIT $2"#,
+            vis = authz::vis_predicate(3, 4)
         );
         let rows = sqlx::query(&sql)
             .bind(ns)
             .bind(limit)
+            .bind(is_super)
+            .bind(uid)
             .fetch_all(&state.pool)
             .await
             .map_err(|e| DomainError::Internal(e.to_string()))?;
@@ -122,13 +131,17 @@ async fn search(
            JOIN namespaces n ON n.id = s.namespace_id
            WHERE s.search_vector @@ plainto_tsquery('simple', $1)
              AND ($2::text IS NULL OR n.slug = $2)
+             AND {vis}
            ORDER BY rank DESC, s.install_count DESC
-           LIMIT $3"#
+           LIMIT $3"#,
+        vis = authz::vis_predicate(4, 5)
     );
     let rows = sqlx::query(&sql)
         .bind(q)
         .bind(ns)
         .bind(limit)
+        .bind(is_super)
+        .bind(uid)
         .fetch_all(&state.pool)
         .await
         .map_err(|e| DomainError::Internal(e.to_string()))?;

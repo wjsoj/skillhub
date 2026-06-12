@@ -14,6 +14,7 @@ use sha2::{Digest, Sha256};
 use sqlx::Row;
 use uuid::Uuid;
 
+use crate::api::authz;
 use crate::error::ApiError;
 use crate::middleware::AuthPrincipal;
 use crate::state::AppState;
@@ -62,9 +63,18 @@ const SELECT_SKILL: &str = r#"
     JOIN namespaces n ON n.id = s.namespace_id
 "#;
 
-async fn list_all(State(state): State<Arc<AppState>>) -> Result<Json<Vec<SkillDto>>, ApiError> {
-    let sql = format!("{SELECT_SKILL} ORDER BY s.install_count DESC, s.display_name ASC");
+async fn list_all(
+    State(state): State<Arc<AppState>>,
+    AuthPrincipal(principal): AuthPrincipal,
+) -> Result<Json<Vec<SkillDto>>, ApiError> {
+    let uid = principal.user_id.ok_or(DomainError::Unauthorized)?;
+    let sql = format!(
+        "{SELECT_SKILL} WHERE {} ORDER BY s.install_count DESC, s.display_name ASC",
+        authz::vis_predicate(1, 2)
+    );
     let rows = sqlx::query(&sql)
+        .bind(authz::is_super(&principal))
+        .bind(uid)
         .fetch_all(&state.pool)
         .await
         .map_err(|e| DomainError::Internal(e.to_string()))?;
@@ -73,10 +83,18 @@ async fn list_all(State(state): State<Arc<AppState>>) -> Result<Json<Vec<SkillDt
 
 async fn get_one(
     State(state): State<Arc<AppState>>,
+    AuthPrincipal(principal): AuthPrincipal,
     Path(id): Path<Uuid>,
 ) -> Result<Json<SkillDto>, ApiError> {
-    let sql = format!("{SELECT_SKILL} WHERE s.id = $1");
+    let uid = principal.user_id.ok_or(DomainError::Unauthorized)?;
+    // Existence is not leaked: an invisible skill returns the same NotFound.
+    let sql = format!(
+        "{SELECT_SKILL} WHERE s.id = $3 AND {}",
+        authz::vis_predicate(1, 2)
+    );
     let row = sqlx::query(&sql)
+        .bind(authz::is_super(&principal))
+        .bind(uid)
         .bind(id)
         .fetch_optional(&state.pool)
         .await
@@ -108,7 +126,7 @@ fn default_visibility() -> String {
 
 async fn create_skill(
     State(state): State<Arc<AppState>>,
-    AuthPrincipal(_principal): AuthPrincipal,
+    AuthPrincipal(principal): AuthPrincipal,
     Json(body): Json<CreateSkillBody>,
 ) -> Result<Json<SkillDto>, ApiError> {
     let slug = body.slug.trim().to_lowercase();
@@ -117,6 +135,10 @@ async fn create_skill(
     }
     if !matches!(body.visibility.as_str(), "private" | "team" | "global") {
         return Err(DomainError::Validation("invalid visibility".into()).into());
+    }
+    // Only super-admins may mint globally-visible skills.
+    if body.visibility == "global" && !authz::is_super(&principal) {
+        return Err(DomainError::Forbidden("only super-admins can publish global skills".into()).into());
     }
 
     // Resolve the namespace by slug, falling back to UUID.
@@ -133,6 +155,9 @@ async fn create_skill(
                 .ok_or_else(|| DomainError::NotFound(format!("namespace '{}'", body.namespace)))?,
         }
     };
+
+    // Authorization: caller must own/admin the namespace (or be super-admin).
+    authz::require_namespace_write(&state, &principal, ns_id).await?;
 
     let dup = sqlx::query("SELECT 1 FROM skills WHERE namespace_id = $1 AND slug = $2")
         .bind(ns_id)
@@ -215,7 +240,9 @@ async fn publish_version(
     Path(skill_id): Path<Uuid>,
     Json(body): Json<PublishBody>,
 ) -> Result<Json<PublishedVersion>, ApiError> {
-    let uid = principal.user_id.ok_or(DomainError::Unauthorized)?;
+    // Authorization: only a maintainer of the skill (or namespace owner/admin,
+    // or super-admin) may publish a version.
+    let uid = authz::require_skill_publish(&state, &principal, skill_id).await?;
     let version = body.version.trim();
     if semver::Version::parse(version).is_err() {
         return Err(DomainError::Validation(format!("'{version}' is not valid semver")).into());

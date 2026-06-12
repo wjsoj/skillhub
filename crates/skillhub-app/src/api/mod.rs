@@ -26,6 +26,7 @@ mod orgs;
 mod iterations;
 mod proposals;
 mod meta;
+mod authz;
 
 pub fn router(state: Arc<AppState>) -> Router {
     let skills_routes = skills::routes()

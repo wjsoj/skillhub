@@ -67,23 +67,27 @@ impl FromRequestParts<Arc<AppState>> for AuthPrincipal {
             }
         }
 
-        // 3: dev mock header.
-        if let Some(uid) = parts
-            .headers
-            .get("x-mock-user-id")
-            .and_then(|v| v.to_str().ok())
-            .and_then(|s| uuid::Uuid::parse_str(s).ok())
-        {
-            return Ok(Self(Principal {
-                user_id: Some(uid),
-                username: parts
-                    .headers
-                    .get("x-mock-username")
-                    .and_then(|v| v.to_str().ok())
-                    .map(|s| s.to_string()),
-                role: Role::User,
-                scopes: vec![],
-            }));
+        // 3: dev mock header — only honored when explicitly enabled in config.
+        // In any non-local deployment this stays off, so the header is ignored
+        // and the request falls through to Unauthorized.
+        if state.config.auth.allow_mock_header {
+            if let Some(uid) = parts
+                .headers
+                .get("x-mock-user-id")
+                .and_then(|v| v.to_str().ok())
+                .and_then(|s| uuid::Uuid::parse_str(s).ok())
+            {
+                return Ok(Self(Principal {
+                    user_id: Some(uid),
+                    username: parts
+                        .headers
+                        .get("x-mock-username")
+                        .and_then(|v| v.to_str().ok())
+                        .map(|s| s.to_string()),
+                    role: Role::User,
+                    scopes: vec![],
+                }));
+            }
         }
 
         Err(unauthorized("missing credentials"))

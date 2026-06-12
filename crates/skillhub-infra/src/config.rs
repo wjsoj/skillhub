@@ -50,6 +50,11 @@ pub struct AuthConfig {
     pub bootstrap_admin_username: String,
     pub bootstrap_admin_password: String,
     pub oauth: Vec<OauthProviderConfig>,
+    /// Accept the `X-Mock-User-Id` dev header as a valid identity. MUST stay
+    /// false in any real deployment — it lets anyone impersonate any user.
+    /// Defaults to false; enable only in local dev (`.env`).
+    #[serde(default)]
+    pub allow_mock_header: bool,
 }
 
 #[derive(Debug, Clone, Deserialize)]
